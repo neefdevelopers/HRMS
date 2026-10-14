@@ -2029,7 +2029,17 @@ export const SettingsPage: React.FC = () => {
                             type="text"
                             placeholder="user@example.com"
                             value={apiForm.smtpUser || ''}
-                            onChange={e => setApiForm({ ...apiForm, smtpUser: e.target.value })}
+                            onChange={e => {
+                              const val = e.target.value;
+                              const isGmail = val.toLowerCase().includes('@gmail.com');
+                              setApiForm({
+                                ...apiForm,
+                                smtpUser: val,
+                                ...(isGmail && (apiForm.smtpHost === 'smtp.ethereal.email' || !apiForm.smtpHost)
+                                  ? { smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpSecure: false }
+                                  : {})
+                              });
+                            }}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                           />
                         </div>
@@ -2047,6 +2057,27 @@ export const SettingsPage: React.FC = () => {
                           />
                         </div>
                       </div>
+
+                      {apiForm.smtpUser?.toLowerCase().includes('@gmail.com') && (
+                        <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
+                          <span className="text-sm">🔑</span>
+                          <div>
+                            <strong className="font-semibold text-amber-950">Gmail requires a 16-letter Google App Password</strong>
+                            <p className="mt-0.5 text-amber-800">
+                              Google blocks your normal email login password on SMTP. To generate the required 16-letter App Password, visit{' '}
+                              <a
+                                href="https://myaccount.google.com/apppasswords"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-700 underline font-bold"
+                              >
+                                myaccount.google.com/apppasswords
+                              </a>
+                              , name it <strong>HRMS</strong>, and paste the 16-character code into the password field above.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Notification Webhook */}

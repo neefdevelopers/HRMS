@@ -71,8 +71,23 @@ export class SystemSettingService {
   /**
    * Helper to fetch setting value by key or fallback to default
    */
-  async getSettingValue<T>(key: string, defaultValue: T): Promise<T> {
-    const record = await prisma.systemSetting.findUnique({ where: { key } });
+  async getSettingValue<T>(key: string, defaultValue: T, companyId?: string | null): Promise<T> {
+    if (companyId) {
+      const companyRecord = await prisma.systemSetting.findFirst({
+        where: { key, companyId }
+      });
+      if (companyRecord && companyRecord.value) {
+        try {
+          return JSON.parse(companyRecord.value) as T;
+        } catch {
+          return defaultValue;
+        }
+      }
+    }
+
+    const record = await prisma.systemSetting.findFirst({
+      where: { key, companyId: null }
+    });
     if (!record || !record.value) return defaultValue;
     try {
       return JSON.parse(record.value) as T;
@@ -90,33 +105,45 @@ export class SystemSettingService {
     value: T,
     userId?: string,
     description?: string,
-    isEncrypted = false
+    isEncrypted = false,
+    companyId?: string | null
   ): Promise<void> {
     const valueStr = JSON.stringify(value);
-    await prisma.systemSetting.upsert({
-      where: { key },
-      create: {
-        category,
-        key,
-        value: valueStr,
-        description,
-        isEncrypted,
-        updatedById: userId || null
-      },
-      update: {
-        category,
-        value: valueStr,
-        description,
-        isEncrypted,
-        updatedById: userId || null
-      }
+    const targetCompanyId = companyId || null;
+    const existing = await prisma.systemSetting.findFirst({
+      where: { key, companyId: targetCompanyId }
     });
+
+    if (existing) {
+      await prisma.systemSetting.update({
+        where: { id: existing.id },
+        data: {
+          category,
+          value: valueStr,
+          description,
+          isEncrypted,
+          updatedById: userId || null
+        }
+      });
+    } else {
+      await prisma.systemSetting.create({
+        data: {
+          companyId: targetCompanyId,
+          category,
+          key,
+          value: valueStr,
+          description,
+          isEncrypted,
+          updatedById: userId || null
+        }
+      });
+    }
   }
 
   /**
    * Helper to log audit changes
    */
-  async logAudit(userId: string | undefined, category: string, changes: any, ipAddress?: string) {
+  async logAudit(userId: string | undefined, category: string, changes: any, ipAddress?: string, companyId?: string | null) {
     try {
       await prisma.auditLog.create({
         data: {
@@ -124,6 +151,7 @@ export class SystemSettingService {
           action: 'UPDATE',
           entityType: 'SystemSettings',
           entityId: category,
+          companyId: companyId || null,
           changesJson: JSON.stringify(changes),
           ipAddress: ipAddress || null
         }
@@ -136,12 +164,27 @@ export class SystemSettingService {
   /**
    * 1. GET ALL SYSTEM SETTINGS
    */
-  async getAllSettings() {
+  async getAllSettings(companyId?: string | null) {
     // 1. Company
-    const company = await this.getSettingValue('company.profile', DEFAULT_COMPANY_SETTINGS);
+    let company = await this.getSettingValue('company.profile', DEFAULT_COMPANY_SETTINGS, companyId);
+    if (companyId) {
+      const liveCompany = await prisma.company.findUnique({ where: { id: companyId } });
+      if (liveCompany) {
+        company = {
+          ...company,
+          companyName: liveCompany.name,
+          email: liveCompany.email,
+          phone: liveCompany.phone || company.phone,
+          address: liveCompany.address || company.address,
+          taxRegistrationNumber: liveCompany.taxId || company.taxRegistrationNumber,
+          companyLogo: liveCompany.logo || company.companyLogo
+        };
+      }
+    }
 
     // 2. Brands
     const brands = await prisma.brand.findMany({
+      where: companyId ? { companyId } : {},
       include: {
         branches: true,
         _count: {
@@ -158,7 +201,7 @@ export class SystemSettingService {
     });
 
     // 3. Attendance Rules
-    const rawAttendance = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES);
+    const rawAttendance = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES, companyId);
     const existingBrandRules = Array.isArray(rawAttendance.brandRules) ? rawAttendance.brandRules : [];
 
     const brandRules = brands.map(b => {
@@ -181,8 +224,9 @@ export class SystemSettingService {
     };
 
     // 4. Leave Policies
-    const leavePolicies = await this.getSettingValue('leave.policies', DEFAULT_LEAVE_POLICIES);
+    const leavePolicies = await this.getSettingValue('leave.policies', DEFAULT_LEAVE_POLICIES, companyId);
     const leaveTypes = await prisma.leaveType.findMany({
+      where: companyId ? { brand: { companyId } } : {},
       include: {
         brand: { select: { id: true, name: true, code: true } },
         _count: { select: { requests: true, balances: true } }
@@ -191,8 +235,9 @@ export class SystemSettingService {
     });
 
     // 5. Shift Rules
-    const shiftRules = await this.getSettingValue('shift.rules', DEFAULT_SHIFT_RULES);
+    const shiftRules = await this.getSettingValue('shift.rules', DEFAULT_SHIFT_RULES, companyId);
     const shifts = await prisma.shift.findMany({
+      where: companyId ? { brand: { companyId } } : {},
       include: {
         brand: { select: { id: true, name: true, code: true } },
         _count: { select: { employees: true, assignments: true } }
@@ -201,10 +246,11 @@ export class SystemSettingService {
     });
 
     // 6. Payroll Settings
-    const payroll = await this.getSettingValue('payroll.rules', DEFAULT_PAYROLL_SETTINGS);
+    const payroll = await this.getSettingValue('payroll.rules', DEFAULT_PAYROLL_SETTINGS, companyId);
 
     // 7. Punching Devices
     const devices = await prisma.punchingDevice.findMany({
+      where: companyId ? { brand: { companyId } } : {},
       include: {
         brand: { select: { id: true, name: true, code: true } },
         branch: { select: { id: true, name: true, code: true } },
@@ -214,7 +260,7 @@ export class SystemSettingService {
     });
 
     // 8. API Settings (Mask secrets for security)
-    const rawApi = await this.getSettingValue('api.config', DEFAULT_API_SETTINGS);
+    const rawApi = await this.getSettingValue('api.config', DEFAULT_API_SETTINGS, companyId);
     const maskedApi = {
       ...rawApi,
       biometricApiKey: rawApi.biometricApiKey ? '••••••••••••••••' : '',
@@ -244,19 +290,19 @@ export class SystemSettingService {
   /**
    * UPDATE COMPANY SETTINGS
    */
-  async updateCompanySettings(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('company.profile', DEFAULT_COMPANY_SETTINGS);
+  async updateCompanySettings(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('company.profile', DEFAULT_COMPANY_SETTINGS, companyId);
     const updated = { ...existing, ...data };
-    await this.setSettingValue('COMPANY', 'company.profile', updated, userId, 'Organization company settings');
-    await this.logAudit(userId, 'COMPANY', { previous: existing, current: updated }, ipAddress);
+    await this.setSettingValue('COMPANY', 'company.profile', updated, userId, 'Organization company settings', false, companyId);
+    await this.logAudit(userId, 'COMPANY', { previous: existing, current: updated }, ipAddress, companyId);
     return updated;
   }
 
   /**
    * UPDATE ATTENDANCE RULES
    */
-  async updateAttendanceRules(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES);
+  async updateAttendanceRules(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES, companyId);
 
     let brandRules: any[] = [];
     if (Array.isArray(data.brandRules)) {
@@ -287,8 +333,8 @@ export class SystemSettingService {
       brandRules
     };
 
-    await this.setSettingValue('ATTENDANCE', 'attendance.rules', updated, userId, 'Core attendance calculation rules');
-    await this.logAudit(userId, 'ATTENDANCE', { previous: existing, current: updated }, ipAddress);
+    await this.setSettingValue('ATTENDANCE', 'attendance.rules', updated, userId, 'Core attendance calculation rules', false, companyId);
+    await this.logAudit(userId, 'ATTENDANCE', { previous: existing, current: updated }, ipAddress, companyId);
     return updated;
   }
 
@@ -296,9 +342,9 @@ export class SystemSettingService {
    * Resolve required daily working hours for an employee
    * considering their Brand and Gender (Male vs. Female)
    */
-  async getRequiredDailyHours(brandId?: string | null, gender?: string | null): Promise<number> {
+  async getRequiredDailyHours(brandId?: string | null, gender?: string | null, companyId?: string | null): Promise<number> {
     try {
-      const attendance = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES);
+      const attendance = await this.getSettingValue('attendance.rules', DEFAULT_ATTENDANCE_RULES, companyId);
       const normalizedGender = (gender || 'MALE').toUpperCase();
 
       // 1. Check brand-specific override
@@ -334,8 +380,8 @@ export class SystemSettingService {
   /**
    * UPDATE LEAVE POLICIES
    */
-  async updateLeavePolicies(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('leave.policies', DEFAULT_LEAVE_POLICIES);
+  async updateLeavePolicies(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('leave.policies', DEFAULT_LEAVE_POLICIES, companyId);
     const updated = {
       maxCarryForwardDays: Number(data.maxCarryForwardDays) || 15,
       accrualFrequency: data.accrualFrequency || 'YEARLY',
@@ -343,16 +389,16 @@ export class SystemSettingService {
       probationLeaveAllowed: Boolean(data.probationLeaveAllowed)
     };
 
-    await this.setSettingValue('LEAVE', 'leave.policies', updated, userId, 'Company-wide leave policies');
-    await this.logAudit(userId, 'LEAVE', { previous: existing, current: updated }, ipAddress);
+    await this.setSettingValue('LEAVE', 'leave.policies', updated, userId, 'Company-wide leave policies', false, companyId);
+    await this.logAudit(userId, 'LEAVE', { previous: existing, current: updated }, ipAddress, companyId);
     return updated;
   }
 
   /**
    * UPDATE SHIFT RULES
    */
-  async updateShiftRules(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('shift.rules', DEFAULT_SHIFT_RULES);
+  async updateShiftRules(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('shift.rules', DEFAULT_SHIFT_RULES, companyId);
     const updated = {
       defaultShiftId: data.defaultShiftId || '',
       defaultBreakMinutes: Number(data.defaultBreakMinutes) || 60,
@@ -361,16 +407,16 @@ export class SystemSettingService {
       maxConsecutiveWorkingDays: Number(data.maxConsecutiveWorkingDays) || 6
     };
 
-    await this.setSettingValue('SHIFT', 'shift.rules', updated, userId, 'Company shift management rules');
-    await this.logAudit(userId, 'SHIFT', { previous: existing, current: updated }, ipAddress);
+    await this.setSettingValue('SHIFT', 'shift.rules', updated, userId, 'Company shift management rules', false, companyId);
+    await this.logAudit(userId, 'SHIFT', { previous: existing, current: updated }, ipAddress, companyId);
     return updated;
   }
 
   /**
    * UPDATE PAYROLL SETTINGS
    */
-  async updatePayrollSettings(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('payroll.rules', DEFAULT_PAYROLL_SETTINGS);
+  async updatePayrollSettings(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('payroll.rules', DEFAULT_PAYROLL_SETTINGS, companyId);
     const updated = {
       defaultOtMultiplier: Number(data.defaultOtMultiplier) || 1.5,
       otCalculationMethod: data.otCalculationMethod || 'STANDARD_MULTIPLIER',
@@ -383,16 +429,16 @@ export class SystemSettingService {
       standardWorkingDaysPerMonth: Number(data.standardWorkingDaysPerMonth) || 26
     };
 
-    await this.setSettingValue('PAYROLL', 'payroll.rules', updated, userId, 'Payroll calculation & cutoff rules');
-    await this.logAudit(userId, 'PAYROLL', { previous: existing, current: updated }, ipAddress);
+    await this.setSettingValue('PAYROLL', 'payroll.rules', updated, userId, 'Payroll calculation & cutoff rules', false, companyId);
+    await this.logAudit(userId, 'PAYROLL', { previous: existing, current: updated }, ipAddress, companyId);
     return updated;
   }
 
   /**
    * UPDATE API SETTINGS (Masked secret protection)
    */
-  async updateApiSettings(data: any, userId?: string, ipAddress?: string) {
-    const existing = await this.getSettingValue('api.config', DEFAULT_API_SETTINGS);
+  async updateApiSettings(data: any, userId?: string, ipAddress?: string, companyId?: string | null) {
+    const existing = await this.getSettingValue('api.config', DEFAULT_API_SETTINGS, companyId);
 
     // Only update biometricApiKey if provided and not masked
     let biometricApiKey = existing.biometricApiKey;
@@ -517,13 +563,14 @@ export class SystemSettingService {
   // ==========================================
   // BRAND MANAGEMENT
   // ==========================================
-  async createBrand(data: any, userId?: string, ipAddress?: string) {
+  async createBrand(data: any, userId?: string, ipAddress?: string, companyId?: string) {
     if (!data.name || !data.code || !data.companyName) {
       throw new Error('Brand name, code, and company name are required.');
     }
 
     const created = await prisma.brand.create({
       data: {
+        companyId: companyId || data.companyId || undefined,
         name: data.name.trim(),
         code: data.code.trim().toUpperCase(),
         companyName: data.companyName.trim(),

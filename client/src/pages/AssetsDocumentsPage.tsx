@@ -55,7 +55,11 @@ const ASSET_TYPES = [
   { value: 'OTHER', label: 'Other Asset', icon: FolderArchive }
 ];
 
-export const AssetsDocumentsPage: React.FC = () => {
+export interface AssetsDocumentsPageProps {
+  mode?: 'assets' | 'documents' | 'all';
+}
+
+export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode = 'all' }) => {
   const { selectedBrandId } = useBrand();
   const { user } = useAuth();
   const isHrOrAdmin =
@@ -65,7 +69,10 @@ export const AssetsDocumentsPage: React.FC = () => {
     user?.role === 'MANAGER';
 
   // Active section tab: 'assets' | 'documents' | 'reminders'
-  const [activeTab, setActiveTab] = useState<'assets' | 'documents' | 'reminders'>('assets');
+  const [activeTab, setActiveTab] = useState<'assets' | 'documents' | 'reminders'>(() => {
+    if (mode === 'documents') return 'documents';
+    return 'assets';
+  });
 
   // Common data
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -629,61 +636,109 @@ export const AssetsDocumentsPage: React.FC = () => {
       {/* Page Title & Notification Banner */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Assets & Documents</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+            {mode === 'assets'
+              ? 'Hardware & Asset Management'
+              : mode === 'documents'
+              ? 'Employee Documents & Compliance'
+              : 'Assets & Documents'}
+          </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Track company hardware assets, employee letters & contracts, and automated expiry reminders.
+            {mode === 'assets'
+              ? 'Track company hardware assets, serial numbers, assignments, and returns across branches.'
+              : mode === 'documents'
+              ? 'Manage employee contracts, certificates, company letters, and automated expiry reminders.'
+              : 'Track company hardware assets, employee letters & contracts, and automated expiry reminders.'}
           </p>
         </div>
 
-        {/* 3 Main Sections Tabs */}
-        <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('assets')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              activeTab === 'assets'
-                ? 'bg-white text-brand-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Laptop className="w-4 h-4" />
-            <span>Assets</span>
-            <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
-              {assets.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('documents')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              activeTab === 'documents'
-                ? 'bg-white text-brand-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FolderArchive className="w-4 h-4" />
-            <span>Employee Documents</span>
-            <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
-              {documents.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reminders')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              activeTab === 'reminders'
-                ? 'bg-white text-brand-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>Expiry Reminders</span>
-            {expirySummary && (expirySummary.counts.expired > 0 || expirySummary.counts.expiringSoon7 > 0) && (
-              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-rose-500 text-white font-bold animate-pulse font-mono">
-                {expirySummary.counts.expired + expirySummary.counts.expiringSoon7}
+        {/* Tab switchers: only show tabs if mode is 'all' or 'documents' */}
+        {mode === 'all' && (
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold">
+            <button
+              onClick={() => setActiveTab('assets')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'assets'
+                  ? 'bg-white text-brand-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Laptop className="w-4 h-4" />
+              <span>Assets</span>
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
+                {assets.length}
               </span>
-            )}
-          </button>
-        </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('documents')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'documents'
+                  ? 'bg-white text-brand-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FolderArchive className="w-4 h-4" />
+              <span>Employee Documents</span>
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
+                {documents.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reminders')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'reminders'
+                  ? 'bg-white text-brand-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Expiry Reminders</span>
+              {expirySummary && (expirySummary.counts.expired > 0 || expirySummary.counts.expiringSoon7 > 0) && (
+                <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-rose-500 text-white font-bold animate-pulse font-mono">
+                  {expirySummary.counts.expired + expirySummary.counts.expiringSoon7}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {mode === 'documents' && (
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold">
+            <button
+              onClick={() => setActiveTab('documents')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'documents'
+                  ? 'bg-white text-brand-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FolderArchive className="w-4 h-4" />
+              <span>All Documents</span>
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-slate-100 text-slate-600 font-mono">
+                {documents.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reminders')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                activeTab === 'reminders'
+                  ? 'bg-white text-brand-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Expiry Reminders</span>
+              {expirySummary && (expirySummary.counts.expired > 0 || expirySummary.counts.expiringSoon7 > 0) && (
+                <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-rose-500 text-white font-bold animate-pulse font-mono">
+                  {expirySummary.counts.expired + expirySummary.counts.expiringSoon7}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Floating Notification */}

@@ -6,7 +6,8 @@ import { Role } from '../middleware/rbac.js';
 import { salaryCalculator } from '../services/salaryCalculator.js';
 import { receiptPdfService, ReceiptPdfData } from '../services/receiptPdfService.js';
 import { numberToIndianCurrencyWords } from '../utils/numberToWords.js';
-import { makeSalaryReceiptAndSendMail } from '../services/salaryReceiptMailer.js';
+import { makeSalaryReceiptAndSendMail, generateSalaryReceiptRecord } from '../services/salaryReceiptMailer.js';
+import { notificationService } from '../services/notificationService.js';
 
 // Helper to get month bounds (e.g. "2026-10" -> "2026-10-01" to "2026-10-31")
 function getMonthBounds(period: string) {
@@ -38,9 +39,17 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
     const search = (req.query.search as string) || '';
 
     const whereBrand: any = {};
+    if (req.effectiveCompanyId) {
+      whereBrand.companyId = req.effectiveCompanyId;
+    }
     if (brandId && brandId !== 'all') {
       whereBrand.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) whereBrand.brandId = req.user.brandId;
     }
 
@@ -359,17 +368,27 @@ export const calculateSingleSalary = async (req: AuthenticatedRequest, res: Resp
       create: dataPayload
     });
 
-    // Automatically make salary receipt and send it to staff as mail
+    // Automatically generate / update salary receipt record for preview and download
     let receiptResult = null;
     try {
-      receiptResult = await makeSalaryReceiptAndSendMail(savedRecord.id);
-    } catch (mailErr: any) {
-      console.error('[calculateSingleSalary] Receipt mail error:', mailErr);
+      if (req.body.sendEmail) {
+        receiptResult = await makeSalaryReceiptAndSendMail(savedRecord.id);
+      } else {
+        const generated = await generateSalaryReceiptRecord(savedRecord.id);
+        receiptResult = {
+          receiptId: generated.receiptId,
+          receiptNumber: generated.receiptNumber,
+          emailSent: false,
+          emailTo: generated.emailTo
+        };
+      }
+    } catch (receiptErr: any) {
+      console.error('[calculateSingleSalary] Receipt error:', receiptErr);
     }
 
     const messageText = receiptResult?.emailSent
       ? `Salary calculated, receipt ${receiptResult.receiptNumber} generated and emailed to ${receiptResult.emailTo}`
-      : 'Salary calculated and receipt generated successfully';
+      : `Salary calculated and receipt ${receiptResult?.receiptNumber || ''} prepared successfully`;
 
     return sendSuccess(
       res,
@@ -395,9 +414,17 @@ export const getSalaryDashboard = async (req: AuthenticatedRequest, res: Respons
     const currentPeriod = (req.query.period as string) || new Date().toISOString().slice(0, 7);
 
     const whereBrand: any = {};
+    if (req.effectiveCompanyId) {
+      whereBrand.companyId = req.effectiveCompanyId;
+    }
     if (brandId && brandId !== 'all') {
       whereBrand.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) whereBrand.brandId = req.user.brandId;
     }
 
@@ -507,9 +534,17 @@ export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response)
     const search = req.query.search as string;
 
     const where: any = {};
+    if (req.effectiveCompanyId) {
+      where.brand = { companyId: req.effectiveCompanyId };
+    }
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) where.brandId = req.user.brandId;
     }
 
@@ -627,9 +662,14 @@ export const saveSalaryConfig = async (req: AuthenticatedRequest, res: Response)
       return sendError(res, 'Employee not found', 404);
     }
 
-    // Multi-brand isolation check
+    // Company and Multi-brand isolation check
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Employee belongs to another company.', 403);
+    }
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== employee.brandId
     ) {
@@ -1000,6 +1040,8 @@ export const processMonthlySalary = async (req: AuthenticatedRequest, res: Respo
     // Role authorization check
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== brandId
     ) {
@@ -1117,11 +1159,15 @@ export const processMonthlySalary = async (req: AuthenticatedRequest, res: Respo
           create: dataPayload
         });
 
-        // Automatically make salary receipt and email it to staff
+        // Automatically generate/update salary receipt record for preview and download
         try {
-          await makeSalaryReceiptAndSendMail(upserted.id);
-        } catch (mailErr: any) {
-          console.error(`[processMonthlySalary] Error making receipt/mail for ${emp.employeeId}:`, mailErr);
+          if (req.body.sendEmail) {
+            await makeSalaryReceiptAndSendMail(upserted.id);
+          } else {
+            await generateSalaryReceiptRecord(upserted.id);
+          }
+        } catch (receiptErr: any) {
+          console.error(`[processMonthlySalary] Error making receipt for ${emp.employeeId}:`, receiptErr);
         }
 
         calculatedPayrolls.push(upserted);
@@ -1179,9 +1225,18 @@ export const getPayrolls = async (req: AuthenticatedRequest, res: Response) => {
       payrollPeriod: { period }
     };
 
+    if (req.effectiveCompanyId) {
+      where.brand = { companyId: req.effectiveCompanyId };
+    }
+
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) where.brandId = req.user.brandId;
     }
 
@@ -1496,11 +1551,20 @@ export const getReceipts = async (req: AuthenticatedRequest, res: Response) => {
     const search = req.query.search as string;
 
     const where: any = {};
+    if (req.effectiveCompanyId) {
+      where.employeePayroll = { brand: { companyId: req.effectiveCompanyId } };
+    }
+
     if (brandId && brandId !== 'all') {
-      where.employeePayroll = { brandId };
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+      where.employeePayroll = { ...(where.employeePayroll || {}), brandId };
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
-        where.employeePayroll = { brandId: req.user.brandId };
+        where.employeePayroll = { ...(where.employeePayroll || {}), brandId: req.user.brandId };
       }
     }
 
@@ -1807,7 +1871,7 @@ export const createOvertimeRecord = async (req: AuthenticatedRequest, res: Respo
     }
 
     const otAmount = Number((parsedHours * otRate).toFixed(2));
-    const isHrOrAdmin = [Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR].includes(req.user?.role as any);
+    const isHrOrAdmin = [Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.COMPANY_HR, Role.GROUP_HR, Role.BRAND_HR].includes(req.user?.role as any);
 
     const otRecord = await prisma.overtimeRecord.create({
       data: {
@@ -2015,6 +2079,32 @@ export const sendSalaryReceiptMailHandler = async (req: AuthenticatedRequest, re
     }
 
     const result = await makeSalaryReceiptAndSendMail(targetPayrollId);
+
+    // Notify employee that their salary receipt is finalized
+    try {
+      const ep = await prisma.employeePayroll.findUnique({
+        where: { id: targetPayrollId },
+        include: { payrollPeriod: true }
+      });
+      if (ep) {
+        const empUserId = await notificationService.getUserIdByEmployeeId(ep.employeeId);
+        if (empUserId) {
+          await notificationService.createNotification({
+            userId: empUserId,
+            title: 'Salary Receipt Finalized',
+            message: `Your salary receipt for period ${ep.payrollPeriod.period} is ready to view and download.`,
+            type: 'SALARY',
+            module: 'salary',
+            recordId: ep.id,
+            actionUrl: '/salary',
+            eventKey: `salary-receipt-${ep.id}`
+          });
+        }
+      }
+    } catch (notifErr: any) {
+      console.error('[SalaryController] Notification error on sendSalaryReceiptMailHandler:', notifErr.message);
+    }
+
     return sendSuccess(
       res,
       result,
@@ -2024,6 +2114,120 @@ export const sendSalaryReceiptMailHandler = async (req: AuthenticatedRequest, re
     );
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to send salary receipt email', 500);
+  }
+};
+
+/**
+ * Prepare / generate salary receipt for preview without sending email
+ */
+export const prepareSalaryReceiptHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { employeePayrollId, employeeId, period } = req.body;
+    let targetPayrollId = employeePayrollId;
+
+    if (!targetPayrollId && employeeId && period) {
+      let ep = await prisma.employeePayroll.findFirst({
+        where: {
+          employeeId,
+          payrollPeriod: { period }
+        }
+      });
+
+      // If not yet saved in EmployeePayroll, calculate and save first
+      if (!ep) {
+        const employee = await prisma.employee.findUnique({
+          where: { id: employeeId },
+          include: { brand: true }
+        });
+        if (!employee) return sendError(res, 'Employee not found', 404);
+
+        const { startDate, endDate } = getMonthBounds(period);
+        const payrollPeriod = await prisma.payrollPeriod.upsert({
+          where: { brandId_period: { brandId: employee.brandId, period } },
+          update: {},
+          create: {
+            brandId: employee.brandId,
+            period,
+            startDate,
+            endDate,
+            status: 'DRAFT'
+          }
+        });
+
+        const calc = await salaryCalculator.calculateSalary({
+          employeeId: employee.id,
+          brandId: employee.brandId,
+          payrollMonth: period,
+          startDate,
+          endDate
+        });
+
+        const dataPayload = {
+          payrollPeriodId: payrollPeriod.id,
+          employeeId: employee.id,
+          brandId: employee.brandId,
+          salaryConfigId: calc.salaryConfigId || null,
+          currency: calc.currency,
+          baseSalary: calc.baseSalary,
+          payableSalary: calc.payableSalary,
+          standardWorkingDays: calc.standardWorkingDays,
+          standardWorkingHoursPerDay: calc.standardWorkingHoursPerDay,
+          payableWorkingHours: calc.payableWorkingHours,
+          eligibleWorkingHours: calc.eligibleWorkingHours,
+          approvedOtHours: calc.approvedOtHours,
+          otRate: calc.otRate,
+          otPayment: calc.otPayment,
+          incompleteHours: calc.incompleteHours,
+          incompleteDeductionRate: calc.incompleteDeductionRate,
+          incompleteDeductionAmount: calc.incompleteDeductionAmount,
+          approvedIncentivesAmount: calc.approvedIncentivesAmount,
+          additionalEarnings: calc.additionalEarnings,
+          otherDeductions: calc.otherDeductions,
+          grossEarnings: calc.grossEarnings,
+          totalDeductions: calc.totalDeductions,
+          netSalary: calc.netSalary,
+          presentDaysCount: calc.presentDaysCount,
+          leaveDaysCount: calc.leaveDaysCount,
+          absentDaysCount: calc.absentDaysCount,
+          hasMissingPunchFlags: calc.hasMissingPunchFlags,
+          calculationBreakdownJson: JSON.stringify(calc.calculationBreakdown),
+          snapshotConfigJson: JSON.stringify(calc.snapshotConfig),
+          status: 'SAVED'
+        };
+
+        ep = await prisma.employeePayroll.upsert({
+          where: {
+            payrollPeriodId_employeeId: {
+              payrollPeriodId: payrollPeriod.id,
+              employeeId: employee.id
+            }
+          },
+          update: dataPayload,
+          create: dataPayload
+        });
+      }
+
+      targetPayrollId = ep.id;
+    }
+
+    if (!targetPayrollId) {
+      return sendError(res, 'employeePayrollId or (employeeId and period) are required', 400);
+    }
+
+    const receiptData = await generateSalaryReceiptRecord(targetPayrollId);
+    return sendSuccess(res, {
+      receiptId: receiptData.receiptId,
+      receiptNumber: receiptData.receiptNumber,
+      snapshot: receiptData.snapshot,
+      emailTo: receiptData.emailTo,
+      employeeName: receiptData.employeeName,
+      period: receiptData.period,
+      companyName: receiptData.companyName,
+      netSalary: receiptData.netSalary,
+      amountInWords: receiptData.receipt.amountInWords
+    }, 'Salary receipt ready for preview');
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to prepare salary receipt', 500);
   }
 };
 

@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 
 export interface AssetInput {
+  companyId?: string;
   brandId: string;
   name: string;
   type: string; // LAPTOP, MOBILE, TABLET, MONITOR, OTHER
@@ -13,10 +14,11 @@ export interface AssetInput {
 }
 
 export interface DocumentInput {
+  companyId?: string;
   brandId: string;
   employeeId: string;
   title: string;
-  documentType: string; // CONTRACT, CERTIFICATE, OFFER_LETTER, APPOINTMENT_LETTER, EXPERIENCE_LETTER, RELIEVING_LETTER, OTHER
+  documentType: string;
   category?: string;
   fileName: string;
   fileType?: string;
@@ -36,15 +38,17 @@ export class AssetDocumentService {
    * ==========================================
    */
   async getAssets(params: {
+    companyId?: string;
     brandId?: string;
     type?: string;
     status?: string;
     employeeId?: string;
     search?: string;
   }) {
-    const { brandId, type, status, employeeId, search } = params;
+    const { companyId, brandId, type, status, employeeId, search } = params;
     const where: any = {};
 
+    if (companyId) where.companyId = companyId;
     if (brandId && brandId !== 'all') where.brandId = brandId;
     if (type && type !== 'ALL') where.type = type;
     if (status && status !== 'ALL') where.status = status;
@@ -95,7 +99,7 @@ export class AssetDocumentService {
     });
   }
 
-  async getAssetById(id: string) {
+  async getAssetById(id: string, companyId?: string | null) {
     const asset = await prisma.asset.findUnique({
       where: { id },
       include: {
@@ -112,19 +116,31 @@ export class AssetDocumentService {
       }
     });
     if (!asset) throw new Error('Asset not found');
+    if (companyId && asset.companyId && asset.companyId !== companyId) {
+      throw new Error('Access denied. Asset belongs to another company.');
+    }
     return asset;
   }
 
   async createAsset(data: AssetInput) {
-    const existing = await prisma.asset.findUnique({
-      where: { assetTag: data.assetTag.trim().toUpperCase() }
+    const brand = await prisma.brand.findUnique({ where: { id: data.brandId } });
+    if (!brand) throw new Error('Brand not found');
+
+    const companyId = data.companyId || brand.companyId;
+
+    const existing = await prisma.asset.findFirst({
+      where: {
+        companyId,
+        assetTag: data.assetTag.trim().toUpperCase()
+      }
     });
     if (existing) {
-      throw new Error(`Asset ID / Tag "${data.assetTag}" already exists.`);
+      throw new Error(`Asset ID / Tag "${data.assetTag}" already exists in this company.`);
     }
 
     return prisma.asset.create({
       data: {
+        companyId,
         brandId: data.brandId,
         name: data.name.trim(),
         type: data.type || 'LAPTOP',
@@ -139,15 +155,22 @@ export class AssetDocumentService {
     });
   }
 
-  async updateAsset(id: string, data: Partial<AssetInput>) {
+  async updateAsset(id: string, data: Partial<AssetInput>, companyId?: string | null) {
     const existing = await prisma.asset.findUnique({ where: { id } });
     if (!existing) throw new Error('Asset not found');
 
+    if (companyId && existing.companyId && existing.companyId !== companyId) {
+      throw new Error('Access denied. Asset belongs to another company.');
+    }
+
     if (data.assetTag && data.assetTag.trim().toUpperCase() !== existing.assetTag) {
-      const duplicate = await prisma.asset.findUnique({
-        where: { assetTag: data.assetTag.trim().toUpperCase() }
+      const duplicate = await prisma.asset.findFirst({
+        where: {
+          companyId: existing.companyId,
+          assetTag: data.assetTag.trim().toUpperCase()
+        }
       });
-      if (duplicate) throw new Error(`Asset ID / Tag "${data.assetTag}" already exists.`);
+      if (duplicate) throw new Error(`Asset ID / Tag "${data.assetTag}" already exists in this company.`);
     }
 
     return prisma.asset.update({
@@ -169,9 +192,13 @@ export class AssetDocumentService {
     });
   }
 
-  async deleteAsset(id: string) {
+  async deleteAsset(id: string, companyId?: string | null) {
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) throw new Error('Asset not found');
+
+    if (companyId && asset.companyId && asset.companyId !== companyId) {
+      throw new Error('Access denied. Asset belongs to another company.');
+    }
 
     if (asset.status === 'ASSIGNED' || asset.assignedEmployeeId) {
       throw new Error('Cannot delete an asset that is currently assigned to an employee. Return the asset first.');
@@ -181,12 +208,21 @@ export class AssetDocumentService {
     return { success: true };
   }
 
-  async assignAsset(id: string, data: { employeeId: string; assignedDate?: string; assignedById?: string; notes?: string }) {
+  async assignAsset(id: string, data: { employeeId: string; assignedDate?: string; assignedById?: string; notes?: string }, companyId?: string | null) {
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) throw new Error('Asset not found');
 
+    if (companyId && asset.companyId && asset.companyId !== companyId) {
+      throw new Error('Access denied. Asset belongs to another company.');
+    }
+
     const employee = await prisma.employee.findUnique({ where: { id: data.employeeId } });
     if (!employee) throw new Error('Employee not found');
+
+    // Strict cross-company assignment prevention
+    if (asset.companyId && employee.companyId && asset.companyId !== employee.companyId) {
+      throw new Error('Cross-company asset assignment is not allowed.');
+    }
 
     // If already assigned to someone, close previous assignment
     if (asset.assignedEmployeeId) {
@@ -229,9 +265,13 @@ export class AssetDocumentService {
     return updated;
   }
 
-  async returnAsset(id: string, data: { returnedDate?: string; returnNotes?: string; conditionOnReturn?: string }) {
+  async returnAsset(id: string, data: { returnedDate?: string; returnNotes?: string; conditionOnReturn?: string }, companyId?: string | null) {
     const asset = await prisma.asset.findUnique({ where: { id } });
     if (!asset) throw new Error('Asset not found');
+
+    if (companyId && asset.companyId && asset.companyId !== companyId) {
+      throw new Error('Access denied. Asset belongs to another company.');
+    }
 
     if (asset.status !== 'ASSIGNED' && !asset.assignedEmployeeId) {
       throw new Error('Asset is not currently assigned to any employee.');
@@ -251,16 +291,17 @@ export class AssetDocumentService {
       }
     });
 
-    // 2. Mark asset as available (or damaged if damaged)
+    // 2. Clear assigned status on asset
     const updated = await prisma.asset.update({
       where: { id },
       data: {
         status: newStatus,
         assignedEmployeeId: null,
-        assignedDate: null,
-        ...(data.returnNotes ? { notes: data.returnNotes } : {})
+        assignedDate: null
       },
-      include: { brand: true }
+      include: {
+        brand: true
+      }
     });
 
     return updated;
@@ -268,21 +309,25 @@ export class AssetDocumentService {
 
   /**
    * ==========================================
-   * 2. EMPLOYEE DOCUMENTS
+   * 2. COMPANY DOCUMENTS MANAGEMENT
    * ==========================================
    */
   async getDocuments(params: {
+    companyId?: string;
     brandId?: string;
     employeeId?: string;
+    category?: string;
     documentType?: string;
     search?: string;
     includeArchived?: boolean;
   }) {
-    const { brandId, employeeId, documentType, search, includeArchived } = params;
+    const { companyId, brandId, employeeId, category, documentType, search, includeArchived } = params;
     const where: any = {};
 
+    if (companyId) where.companyId = companyId;
     if (brandId && brandId !== 'all') where.brandId = brandId;
     if (employeeId) where.employeeId = employeeId;
+    if (category && category !== 'ALL') where.category = category;
     if (documentType && documentType !== 'ALL') where.documentType = documentType;
     if (!includeArchived) where.isArchived = false;
 
@@ -290,7 +335,7 @@ export class AssetDocumentService {
       where.OR = [
         { title: { contains: search } },
         { fileName: { contains: search } },
-        { remarks: { contains: search } },
+        { description: { contains: search } },
         {
           employee: {
             OR: [
@@ -313,6 +358,7 @@ export class AssetDocumentService {
             employeeId: true,
             firstName: true,
             lastName: true,
+            email: true,
             department: { select: { name: true } },
             designation: { select: { title: true } }
           }
@@ -322,10 +368,33 @@ export class AssetDocumentService {
     });
   }
 
+  async getDocumentById(id: string, companyId?: string | null) {
+    const doc = await prisma.employeeDocument.findUnique({
+      where: { id },
+      include: {
+        brand: true,
+        employee: {
+          include: { department: true, designation: true }
+        }
+      }
+    });
+    if (!doc) throw new Error('Document not found');
+    if (companyId && doc.companyId && doc.companyId !== companyId) {
+      throw new Error('Access denied. Document belongs to another company.');
+    }
+    return doc;
+  }
+
   async createDocument(data: DocumentInput) {
+    const employee = await prisma.employee.findUnique({ where: { id: data.employeeId } });
+    if (!employee) throw new Error('Employee not found');
+
+    const companyId = data.companyId || employee.companyId;
+
     return prisma.employeeDocument.create({
       data: {
-        brandId: data.brandId,
+        companyId,
+        brandId: data.brandId || employee.brandId,
         employeeId: data.employeeId,
         title: data.title.trim(),
         documentType: data.documentType || 'OTHER',
@@ -341,15 +410,19 @@ export class AssetDocumentService {
         uploadedById: data.uploadedById || null
       },
       include: {
-        employee: { select: { id: true, employeeId: true, firstName: true, lastName: true } },
-        brand: true
+        brand: true,
+        employee: { select: { id: true, employeeId: true, firstName: true, lastName: true } }
       }
     });
   }
 
-  async updateDocument(id: string, data: Partial<DocumentInput>) {
+  async updateDocument(id: string, data: Partial<DocumentInput>, companyId?: string | null) {
     const existing = await prisma.employeeDocument.findUnique({ where: { id } });
     if (!existing) throw new Error('Document not found');
+
+    if (companyId && existing.companyId && existing.companyId !== companyId) {
+      throw new Error('Access denied. Document belongs to another company.');
+    }
 
     return prisma.employeeDocument.update({
       where: { id },
@@ -368,55 +441,13 @@ export class AssetDocumentService {
     });
   }
 
-  async replaceDocument(id: string, newFileData: {
-    fileName: string;
-    fileType?: string;
-    fileSize?: number;
-    fileUrl: string;
-    title?: string;
-    issueDate?: string;
-    expiryDate?: string;
-    remarks?: string;
-    uploadedById?: string;
-  }) {
+  async deleteDocument(id: string, companyId?: string | null) {
     const existing = await prisma.employeeDocument.findUnique({ where: { id } });
     if (!existing) throw new Error('Document not found');
 
-    // 1. Mark existing document as archived to preserve history
-    await prisma.employeeDocument.update({
-      where: { id },
-      data: { isArchived: true }
-    });
-
-    // 2. Create the new replaced document version
-    const newDoc = await prisma.employeeDocument.create({
-      data: {
-        brandId: existing.brandId,
-        employeeId: existing.employeeId,
-        title: newFileData.title ? newFileData.title.trim() : existing.title,
-        documentType: existing.documentType,
-        category: existing.category,
-        fileName: newFileData.fileName.trim(),
-        fileType: newFileData.fileType || existing.fileType,
-        fileSize: newFileData.fileSize !== undefined ? Number(newFileData.fileSize) : existing.fileSize,
-        fileUrl: newFileData.fileUrl,
-        issueDate: newFileData.issueDate !== undefined ? newFileData.issueDate : existing.issueDate,
-        expiryDate: newFileData.expiryDate !== undefined ? newFileData.expiryDate : existing.expiryDate,
-        remarks: newFileData.remarks !== undefined ? newFileData.remarks : existing.remarks,
-        replacedById: existing.id,
-        uploadedById: newFileData.uploadedById || null
-      },
-      include: {
-        employee: { select: { id: true, employeeId: true, firstName: true, lastName: true } }
-      }
-    });
-
-    return newDoc;
-  }
-
-  async deleteDocument(id: string) {
-    const existing = await prisma.employeeDocument.findUnique({ where: { id } });
-    if (!existing) throw new Error('Document not found');
+    if (companyId && existing.companyId && existing.companyId !== companyId) {
+      throw new Error('Access denied. Document belongs to another company.');
+    }
 
     await prisma.employeeDocument.delete({ where: { id } });
     return { success: true };
@@ -427,20 +458,17 @@ export class AssetDocumentService {
    * 3. DOCUMENT EXPIRY REMINDERS
    * ==========================================
    */
-  async getExpirySummary(params: { brandId?: string }) {
-    const { brandId } = params;
+  async getExpirySummary(params: { companyId?: string; brandId?: string }) {
+    const { companyId, brandId } = params;
     const whereBrand: any = {
       isArchived: false,
       expiryDate: { not: null }
     };
+    if (companyId) whereBrand.companyId = companyId;
     if (brandId && brandId !== 'all') whereBrand.brandId = brandId;
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const today = new Date(todayStr + 'T00:00:00Z');
-
-    // Date thresholds: 7 days and 30 days
-    const next7DaysStr = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-    const next30DaysStr = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
 
     const documentsWithExpiry = await prisma.employeeDocument.findMany({
       where: whereBrand,
@@ -506,52 +534,6 @@ export class AssetDocumentService {
       expiringSoon7,
       expiringSoon30,
       activeValid
-    };
-  }
-
-  async triggerExpiryReminders(params: { brandId?: string }) {
-    const summary = await this.getExpirySummary(params);
-    const triggeredReminders: any[] = [];
-
-    // 1. Process 7-day reminders (for docs <= 7 days where reminder7Sent is false)
-    for (const doc of summary.expiringSoon7) {
-      if (!doc.reminder7Sent) {
-        await prisma.employeeDocument.update({
-          where: { id: doc.id },
-          data: { reminder7Sent: true, reminder30Sent: true }
-        });
-        triggeredReminders.push({
-          documentId: doc.id,
-          employee: `${doc.employee?.firstName} ${doc.employee?.lastName}`,
-          documentTitle: doc.title,
-          expiryDate: doc.expiryDate,
-          daysLeft: doc.daysUntilExpiry,
-          reminderType: '7_DAYS_URGENT'
-        });
-      }
-    }
-
-    // 2. Process 30-day reminders (for docs <= 30 days where reminder30Sent is false)
-    for (const doc of summary.expiringSoon30) {
-      if (!doc.reminder30Sent) {
-        await prisma.employeeDocument.update({
-          where: { id: doc.id },
-          data: { reminder30Sent: true }
-        });
-        triggeredReminders.push({
-          documentId: doc.id,
-          employee: `${doc.employee?.firstName} ${doc.employee?.lastName}`,
-          documentTitle: doc.title,
-          expiryDate: doc.expiryDate,
-          daysLeft: doc.daysUntilExpiry,
-          reminderType: '30_DAYS_UPCOMING'
-        });
-      }
-    }
-
-    return {
-      remindersSent: triggeredReminders.length,
-      details: triggeredReminders
     };
   }
 }

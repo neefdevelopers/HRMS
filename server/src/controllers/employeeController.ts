@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../utils/response.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { Role } from '../middleware/rbac.js';
 import { systemSettingService } from '../services/systemSettingService.js';
+import { notificationService } from '../services/notificationService.js';
 
 export const getEmployees = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -15,13 +16,24 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
     const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string;
+    const effectiveCompanyId = req.effectiveCompanyId;
 
     const where: any = {};
+
+    // Company isolation
+    if (effectiveCompanyId) {
+      where.companyId = effectiveCompanyId;
+    }
 
     // Brand filtering & isolation
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
         where.brandId = req.user.brandId;
       }
@@ -99,6 +111,11 @@ export const getEmployeeById = async (req: AuthenticatedRequest, res: Response) 
       return sendError(res, 'Employee not found', 404);
     }
 
+    // Company isolation check
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this employee record.', 403);
+    }
+
     // Role check: Employee can only see self; Brand HR can only see same brand
     if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== id) {
       return sendError(res, 'Access denied. You can only view your own profile.', 403);
@@ -106,6 +123,8 @@ export const getEmployeeById = async (req: AuthenticatedRequest, res: Response) 
 
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== employee.brandId
     ) {
@@ -118,16 +137,6 @@ export const getEmployeeById = async (req: AuthenticatedRequest, res: Response) 
   }
 };
 
-/**
- * GET /api/employees/:id/profile
- * Retrieves full comprehensive employee profile including:
- * - Profile details (personal, contact, official, salary, shift)
- * - Attendance & punch history
- * - Monthly attendance summary
- * - Leave balances & requests
- * - Salary & payslips history
- * - Uploaded documents
- */
 export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -154,6 +163,11 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
       return sendError(res, 'Employee not found', 404);
     }
 
+    // Company isolation check
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this employee record.', 403);
+    }
+
     // Role check: Employee can only see self; Brand HR can only see same brand
     if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== id) {
       return sendError(res, 'Access denied. You can only view your own profile.', 403);
@@ -161,6 +175,8 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
 
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== employee.brandId
     ) {
@@ -197,69 +213,56 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
     let lateCount = 0;
 
     const brandGenderDailyHours = await systemSettingService.getRequiredDailyHours(
-      employee.brandId,
-      (employee as any).gender
+      employee.gender || 'MALE',
+      employee.brandId
     );
-    const expectedDailyHours = (employee.shift?.fullDayThresholdHours || brandGenderDailyHours);
 
     for (const a of currentMonthAttendances) {
       totalWorkingHours += a.workingHours || 0;
-      if (a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'HALF_DAY') presentCount++;
-      if (a.status === 'ABSENT') absentCount++;
-      if (a.status === 'ON_LEAVE') leaveCount++;
-      if (a.status === 'WEEK_OFF') weekOffCount++;
-      if (a.lateMinutes > 0) lateCount++;
+      if (a.status === 'PRESENT') presentCount++;
+      else if (a.status === 'ABSENT') absentCount++;
+      else if (a.status === 'ON_LEAVE') leaveCount++;
+      else if (a.status === 'WEEK_OFF') weekOffCount++;
+      else if (a.status === 'LATE') {
+        presentCount++;
+        lateCount++;
+      } else if (a.status === 'HALF_DAY') {
+        presentCount += 0.5;
+      }
 
-      if (a.status !== 'ON_LEAVE' && a.status !== 'WEEK_OFF' && a.status !== 'HOLIDAY') {
-        if (a.workingHours > expectedDailyHours) {
-          totalOvertimeHours += Number((a.workingHours - expectedDailyHours).toFixed(2));
-        } else if (a.workingHours < expectedDailyHours && a.checkIn) {
-          totalIncompleteHours += Number((expectedDailyHours - a.workingHours).toFixed(2));
-        }
-      } else if (a.status === 'WEEK_OFF' && a.workingHours > 0) {
-        totalOvertimeHours += a.workingHours;
+      if (a.workingHours > brandGenderDailyHours) {
+        totalOvertimeHours += a.workingHours - brandGenderDailyHours;
+      } else if (a.workingHours > 0 && a.workingHours < brandGenderDailyHours) {
+        totalIncompleteHours += brandGenderDailyHours - a.workingHours;
       }
     }
 
-    const attendanceSummary = {
-      month: currentMonthPrefix,
-      totalLoggedDays: currentMonthAttendances.length,
-      presentDays: presentCount,
-      absentDays: absentCount,
-      leaveDays: leaveCount,
-      weekOffDays: weekOffCount,
-      lateDays: lateCount,
-      totalWorkingHours: Number(totalWorkingHours.toFixed(2)),
-      totalOvertimeHours: Number(totalOvertimeHours.toFixed(2)),
-      totalIncompleteHours: Number(totalIncompleteHours.toFixed(2))
-    };
-
-    // 4. Fetch Leave Balances & Requests
+    const currentYear = new Date().getFullYear();
     const leaveBalances = await prisma.leaveBalance.findMany({
-      where: { employeeId: id },
-      include: { leaveType: true },
-      orderBy: { year: 'desc' }
+      where: { employeeId: id, year: currentYear },
+      include: { leaveType: true }
     });
 
     const leaveRequests = await prisma.leaveRequest.findMany({
       where: { employeeId: id },
       include: { leaveType: true },
-      orderBy: { appliedAt: 'desc' },
-      take: 50
+      orderBy: { createdAt: 'desc' },
+      take: 20
     });
 
-    // 5. Fetch Salary & Payroll Records & Payslips
+    const salaryConfigs = await prisma.employeeSalaryConfig.findMany({
+      where: { employeeId: id },
+      orderBy: { effectiveFrom: 'desc' },
+      take: 5
+    });
+
     const payrolls = await prisma.employeePayroll.findMany({
       where: { employeeId: id },
-      include: {
-        receipt: true,
-        payrollPeriod: true
-      },
+      include: { payrollPeriod: true, receipt: true },
       orderBy: { createdAt: 'desc' },
-      take: 24
+      take: 12
     });
 
-    // 6. Documents
     const documents = await prisma.employeeDocument.findMany({
       where: { employeeId: id },
       orderBy: { createdAt: 'desc' }
@@ -269,20 +272,29 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
       employee,
       attendanceHistory: attendances,
       punchHistory: punches,
-      attendanceSummary,
+      attendanceSummary: {
+        period: currentMonthPrefix,
+        presentCount,
+        absentCount,
+        leaveCount,
+        weekOffCount,
+        lateCount,
+        totalWorkingHours: Math.round(totalWorkingHours * 100) / 100,
+        totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+        totalIncompleteHours: Math.round(totalIncompleteHours * 100) / 100,
+        expectedDailyHours: brandGenderDailyHours
+      },
       leaveBalances,
       leaveRequests,
+      salaryConfigs,
       payrolls,
       documents
-    }, 'Employee complete profile retrieved');
+    });
   } catch (error: any) {
-    return sendError(res, error.message || 'Failed to fetch employee complete profile', 500);
+    return sendError(res, error.message || 'Failed to fetch complete profile', 500);
   }
 };
 
-/**
- * Documents management endpoints
- */
 export const getEmployeeDocuments = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id: employeeId } = req.params;
@@ -292,10 +304,12 @@ export const getEmployeeDocuments = async (req: AuthenticatedRequest, res: Respo
       return sendError(res, 'Employee not found', 404);
     }
 
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this employee.', 403);
+    }
+
     if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== employee.brandId &&
+      req.user?.role === Role.EMPLOYEE &&
       req.user?.employeeId !== employeeId
     ) {
       return sendError(res, 'Access denied to view documents for this employee.', 403);
@@ -326,8 +340,14 @@ export const uploadEmployeeDocument = async (req: AuthenticatedRequest, res: Res
       return sendError(res, 'Employee not found', 404);
     }
 
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this employee.', 403);
+    }
+
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== employee.brandId
     ) {
@@ -336,6 +356,7 @@ export const uploadEmployeeDocument = async (req: AuthenticatedRequest, res: Res
 
     const doc = await prisma.employeeDocument.create({
       data: {
+        companyId: employee.companyId,
         employeeId,
         brandId: employee.brandId,
         title: title.trim(),
@@ -367,8 +388,14 @@ export const deleteEmployeeDocument = async (req: AuthenticatedRequest, res: Res
       return sendError(res, 'Document not found for this employee', 404);
     }
 
+    if (req.effectiveCompanyId && doc.companyId && doc.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this document.', 403);
+    }
+
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== doc.brandId
     ) {
@@ -412,35 +439,68 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
   try {
     const data = employeeSchema.parse(req.body);
 
+    const brand = await prisma.brand.findUnique({ where: { id: data.brandId } });
+    if (!brand) {
+      return sendError(res, 'Specified brand not found.', 404);
+    }
+
+    const targetCompanyId = req.effectiveCompanyId || brand.companyId;
+    if (brand.companyId && targetCompanyId && brand.companyId !== targetCompanyId) {
+      return sendError(res, 'Brand does not belong to the active company.', 403);
+    }
+
     // Enforce brand isolation on creation
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== data.brandId
     ) {
       return sendError(res, 'Cannot create employees for a brand you do not manage.', 403);
     }
 
-    // Validate unique employeeId and biometricId
-    const existingEmp = await prisma.employee.findUnique({
-      where: { employeeId: data.employeeId }
+    // Validate unique employeeId scoped to company
+    const existingEmp = await prisma.employee.findFirst({
+      where: {
+        companyId: targetCompanyId,
+        employeeId: data.employeeId
+      }
     });
     if (existingEmp) {
-      return sendError(res, `Employee ID '${data.employeeId}' is already registered.`, 400);
+      return sendError(res, `Employee ID '${data.employeeId}' is already registered in this company.`, 400);
+    }
+
+    // Reject assigning branch or department from another brand
+    if (data.branchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
+      if (!branch || branch.brandId !== data.brandId) {
+        return sendError(res, 'Specified branch does not belong to the selected brand.', 400);
+      }
+    }
+    if (data.departmentId) {
+      const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
+      if (!dept || dept.brandId !== data.brandId) {
+        return sendError(res, 'Specified department does not belong to the selected brand.', 400);
+      }
     }
 
     if (data.biometricId) {
-      const existingBio = await prisma.employee.findUnique({
-        where: { biometricId: data.biometricId }
+      const existingBio = await prisma.employee.findFirst({
+        where: {
+          companyId: targetCompanyId,
+          biometricId: data.biometricId
+        }
       });
       if (existingBio) {
-        return sendError(res, `Biometric ID '${data.biometricId}' is already assigned to another employee.`, 400);
+        return sendError(res, `Biometric ID '${data.biometricId}' is already assigned in this company.`, 400);
       }
     }
 
     const employee = await prisma.employee.create({
       data: {
         ...data,
+        companyId: targetCompanyId,
         shiftId: data.shiftId || undefined,
         reportingManagerId: data.reportingManagerId || undefined
       },
@@ -479,9 +539,26 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
         entityType: 'Employee',
         entityId: employee.id,
         brandId: employee.brandId,
+        companyId: targetCompanyId,
         changesJson: JSON.stringify(data)
       }
     });
+
+    // Notify HR users about new employee creation
+    try {
+      const hrUserIds = await notificationService.getHrUserIdsForBrand(employee.brandId);
+      await notificationService.notifyUsers(hrUserIds, {
+        title: 'New Employee Registered',
+        message: `${employee.firstName} ${employee.lastName} (${employee.employeeId}) has been onboarded into ${employee.brand.name}.`,
+        type: 'EMPLOYEE',
+        module: 'employee',
+        recordId: employee.id,
+        actionUrl: `/employees/${employee.id}`,
+        eventKeyPrefix: `new-emp-${employee.id}`
+      });
+    } catch (notifErr: any) {
+      console.error('[EmployeeController] Notification error on createEmployee:', notifErr.message);
+    }
 
     return sendSuccess(res, employee, 'Employee created successfully', undefined, 201);
   } catch (error: any) {
@@ -502,13 +579,45 @@ export const updateEmployee = async (req: AuthenticatedRequest, res: Response) =
       return sendError(res, 'Employee not found', 404);
     }
 
+    // Company isolation check
+    if (req.effectiveCompanyId && existing.companyId && existing.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Employee belongs to another company.', 403);
+    }
+
     // Role brand authorization check
     if (
       req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
       req.user?.role !== Role.GROUP_HR &&
       req.user?.brandId !== existing.brandId
     ) {
       return sendError(res, 'Access denied to update employee from this brand.', 403);
+    }
+
+    const effectiveBrandId = data.brandId || existing.brandId;
+    if (data.brandId && data.brandId !== existing.brandId) {
+      const newBrand = await prisma.brand.findUnique({ where: { id: data.brandId } });
+      if (!newBrand) {
+        return sendError(res, 'Target brand not found.', 404);
+      }
+      const companyId = req.effectiveCompanyId || existing.companyId;
+      if (companyId && newBrand.companyId !== companyId) {
+        return sendError(res, 'Cannot reassign employee to a brand in another company.', 403);
+      }
+    }
+
+    if (data.branchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
+      if (!branch || branch.brandId !== effectiveBrandId) {
+        return sendError(res, 'Specified branch does not belong to the employee brand.', 400);
+      }
+    }
+    if (data.departmentId) {
+      const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
+      if (!dept || dept.brandId !== effectiveBrandId) {
+        return sendError(res, 'Specified department does not belong to the employee brand.', 400);
+      }
     }
 
     const updated = await prisma.employee.update({
@@ -534,9 +643,29 @@ export const updateEmployee = async (req: AuthenticatedRequest, res: Response) =
         entityType: 'Employee',
         entityId: updated.id,
         brandId: updated.brandId,
+        companyId: existing.companyId,
         changesJson: JSON.stringify(data)
       }
     });
+
+    // Notify employee of profile updates if updated by someone else
+    try {
+      const empUserId = await notificationService.getUserIdByEmployeeId(updated.id);
+      if (empUserId && empUserId !== req.user?.id) {
+        await notificationService.createNotification({
+          userId: empUserId,
+          title: 'Profile Updated',
+          message: 'Your official employee profile details were updated by HR.',
+          type: 'EMPLOYEE',
+          module: 'employee',
+          recordId: updated.id,
+          actionUrl: `/employees/${updated.id}`,
+          eventKey: `emp-update-${updated.id}-${Date.now()}`
+        });
+      }
+    } catch (notifErr: any) {
+      console.error('[EmployeeController] Notification error on updateEmployee:', notifErr.message);
+    }
 
     return sendSuccess(res, updated, 'Employee updated successfully');
   } catch (error: any) {

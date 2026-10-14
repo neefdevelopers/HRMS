@@ -9,6 +9,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
+  isSuperAdmin: boolean;
+  isCompanyAdmin: boolean;
   canAccessAllBrands: boolean;
   canManageEmployees: boolean;
   canManageAttendance: boolean;
@@ -30,9 +32,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const userData = await api.getMe();
         setUser(userData);
+        if (userData.activeCompany?.id && !localStorage.getItem('hrms_active_company_id')) {
+          localStorage.setItem('hrms_active_company_id', userData.activeCompany.id);
+        }
       } catch (err) {
         console.error('Failed to restore session:', err);
         localStorage.removeItem('hrms_token');
+        localStorage.removeItem('hrms_active_company_id');
         setToken(null);
         setUser(null);
       } finally {
@@ -46,6 +52,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     const data = await api.login({ email, password });
     localStorage.setItem('hrms_token', data.token);
+    if (data.activeCompany?.id) {
+      localStorage.setItem('hrms_active_company_id', data.activeCompany.id);
+    }
     setToken(data.token);
     setUser(data.user);
   };
@@ -53,13 +62,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     localStorage.removeItem('hrms_token');
     localStorage.removeItem('hrms_selected_brand');
+    localStorage.removeItem('hrms_active_company_id');
     setToken(null);
     setUser(null);
   };
 
-  const canAccessAllBrands = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR';
-  const canManageEmployees = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR' || user?.role === 'BRAND_HR';
-  const canManageAttendance = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR' || user?.role === 'BRAND_HR';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isCompanyAdmin = user?.role === 'COMPANY_ADMIN';
+  const isCompanyHr = user?.role === 'COMPANY_HR' || user?.role === 'GROUP_HR';
+  const canAccessAllBrands = isSuperAdmin || isCompanyAdmin || isCompanyHr;
+  const canManageEmployees = isSuperAdmin || isCompanyAdmin || isCompanyHr || user?.role === 'BRAND_HR';
+  const canManageAttendance = isSuperAdmin || isCompanyAdmin || isCompanyHr || user?.role === 'BRAND_HR';
 
   return (
     <AuthContext.Provider
@@ -70,6 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         isAuthenticated: !!user,
+        isSuperAdmin,
+        isCompanyAdmin,
         canAccessAllBrands,
         canManageEmployees,
         canManageAttendance

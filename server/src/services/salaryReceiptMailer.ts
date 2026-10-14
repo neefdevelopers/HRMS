@@ -12,10 +12,24 @@ export interface MakeReceiptAndMailResult {
   error?: string;
 }
 
+export interface GeneratedReceiptRecord {
+  receiptId: string;
+  receiptNumber: string;
+  receipt: any;
+  snapshot: ReceiptPdfData;
+  pdfBuffer: Buffer;
+  emailTo: string;
+  employeeName: string;
+  period: string;
+  companyName: string;
+  netSalary: number;
+  currency: string;
+}
+
 /**
- * Creates/updates SalaryReceipt record, generates PDF, and sends it to the employee via email.
+ * Creates/updates SalaryReceipt record and generates PDF buffer without emailing.
  */
-export async function makeSalaryReceiptAndSendMail(employeePayrollId: string): Promise<MakeReceiptAndMailResult> {
+export async function generateSalaryReceiptRecord(employeePayrollId: string): Promise<GeneratedReceiptRecord> {
   const ep = await prisma.employeePayroll.findUnique({
     where: { id: employeePayrollId },
     include: {
@@ -103,30 +117,49 @@ export async function makeSalaryReceiptAndSendMail(employeePayrollId: string): P
   // 2. Generate PDF document buffer
   const pdfBuffer = await receiptPdfService.generateSalaryReceiptPdf(snapshot);
 
-  // 3. Send email to employee with the generated PDF attached
-  const emailTo = ep.employee.email;
-  let emailResult: EmailResult = { success: false };
-
-  if (emailTo) {
-    emailResult = await emailService.sendSalaryReceiptEmail({
-      to: emailTo,
-      employeeName: `${ep.employee.firstName} ${ep.employee.lastName}`,
-      period: ep.payrollPeriod.period,
-      receiptNumber,
-      netSalary: ep.netSalary,
-      currency: ep.currency,
-      companyName: ep.brand.companyName || ep.brand.name,
-      pdfBuffer
-    });
-  } else {
-    console.warn(`[SalaryReceiptMailer] Employee ${ep.employee.employeeId} does not have an email address.`);
-  }
-
   return {
     receiptId: receipt.id,
     receiptNumber: receipt.receiptNumber,
+    receipt,
+    snapshot,
+    pdfBuffer,
+    emailTo: ep.employee.email || '',
+    employeeName: `${ep.employee.firstName} ${ep.employee.lastName}`,
+    period: ep.payrollPeriod.period,
+    companyName: ep.brand.companyName || ep.brand.name,
+    netSalary: ep.netSalary,
+    currency: ep.currency || 'INR'
+  };
+}
+
+/**
+ * Creates/updates SalaryReceipt record, generates PDF, and sends it to the employee via email.
+ */
+export async function makeSalaryReceiptAndSendMail(employeePayrollId: string): Promise<MakeReceiptAndMailResult> {
+  const generated = await generateSalaryReceiptRecord(employeePayrollId);
+
+  let emailResult: EmailResult = { success: false };
+
+  if (generated.emailTo) {
+    emailResult = await emailService.sendSalaryReceiptEmail({
+      to: generated.emailTo,
+      employeeName: generated.employeeName,
+      period: generated.period,
+      receiptNumber: generated.receiptNumber,
+      netSalary: generated.netSalary,
+      currency: generated.currency,
+      companyName: generated.companyName,
+      pdfBuffer: generated.pdfBuffer
+    });
+  } else {
+    console.warn(`[SalaryReceiptMailer] Employee ${generated.employeeName} does not have an email address.`);
+  }
+
+  return {
+    receiptId: generated.receiptId,
+    receiptNumber: generated.receiptNumber,
     emailSent: emailResult.success,
-    emailTo,
+    emailTo: generated.emailTo,
     emailPreviewUrl: emailResult.previewUrl,
     error: emailResult.error
   };

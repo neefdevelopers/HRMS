@@ -11,8 +11,11 @@ server/dist/
 # SQLite Databases & Local Storage
 *.db
 *.db-journal
+*.bak
+*.bak*
 server/prisma/*.db
 server/prisma/*.db-journal
+server/prisma/*.bak*
 
 # Environment Variables & Secrets
 .env

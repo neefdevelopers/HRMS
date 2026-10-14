@@ -6,13 +6,16 @@ import {
   EmployeeCompleteProfile, EmployeeDocument,
   Asset, CompanyDocument, DocumentExpirySummary,
   SystemSettingsData, CompanySettings, AttendanceRules, LeavePolicies, ShiftRules,
-  PayrollSettings, PunchingDeviceSetting, ApiSettings, TestConnectionResult
+  PayrollSettings, PunchingDeviceSetting, ApiSettings, TestConnectionResult,
+  ExitRequest, ExitDashboardData, RelievingLetterPreview,
+  NotificationItem, NotificationPagination, Company, CompanyMembership
 } from '../types';
 
 const API_BASE = '/api';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('hrms_token');
+  const activeCompanyId = localStorage.getItem('hrms_active_company_id');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>)
@@ -20,6 +23,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (activeCompanyId) {
+    headers['X-Company-Id'] = activeCompanyId;
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -37,15 +43,45 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return resJson.data;
 }
 
+async function requestWithMeta<T, M = any>(endpoint: string, options: RequestInit = {}): Promise<{ data: T; meta?: M }> {
+  const token = localStorage.getItem('hrms_token');
+  const activeCompanyId = localStorage.getItem('hrms_active_company_id');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>)
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (activeCompanyId) {
+    headers['X-Company-Id'] = activeCompanyId;
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers
+  });
+
+  const resJson = await response.json();
+
+  if (!response.ok || resJson.success === false) {
+    const errorMsg = resJson.error || resJson.message || 'Request failed';
+    throw new Error(errorMsg);
+  }
+
+  return { data: resJson.data, meta: resJson.meta };
+}
+
 export const api = {
   // Auth
   login: (credentials: { email: string; password: string }) =>
-    request<{ token: string; user: User }>('/auth/login', {
+    request<{ token: string; user: User; companies?: Company[]; activeCompany?: Company }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials)
     }),
 
-  getMe: () => request<User>('/auth/me'),
+  getMe: () => request<User & { activeCompany?: Company; companies?: Company[] }>('/auth/me'),
 
   // Dashboard Metrics
   getDashboardMetrics: (params: { date?: string; brandId?: string; branchId?: string; departmentId?: string }) => {
@@ -59,13 +95,28 @@ export const api = {
   },
 
   // Brands & Org Structure
-  getBrands: (brandId?: string) => {
-    const url = brandId ? `/brands?brandId=${brandId}` : '/brands';
+  getBrands: (param?: string | { brandId?: string; companyId?: string }) => {
+    let url = '/brands';
+    if (typeof param === 'string') {
+      url = param && param !== 'all' ? `/brands?brandId=${param}` : '/brands';
+    } else if (param) {
+      const sp = new URLSearchParams();
+      if (param.brandId && param.brandId !== 'all') sp.append('brandId', param.brandId);
+      if (param.companyId && param.companyId !== 'all') sp.append('companyId', param.companyId);
+      const qs = sp.toString();
+      url = qs ? `/brands?${qs}` : '/brands';
+    }
     return request<Brand[]>(url);
   },
 
   createBrand: (data: Partial<Brand>) =>
     request<Brand>('/brands', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateBrand: (id: string, data: Partial<Brand>) =>
+    request<Brand>(`/brands/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  toggleBrandStatus: (id: string, isActive: boolean) =>
+    request<Brand>(`/brands/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
 
   getBranches: (brandId?: string) => {
     const url = brandId && brandId !== 'all' ? `/brands/branches?brandId=${brandId}` : '/brands/branches';
@@ -334,11 +385,12 @@ export const api = {
 
   downloadReceiptPdf: async (receiptId: string, receiptNumber?: string) => {
     const token = localStorage.getItem('hrms_token');
-    const response = await fetch(`/api/salary/receipts/${receiptId}/pdf`, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
+    const activeCompanyId = localStorage.getItem('hrms_active_company_id');
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeCompanyId ? { 'X-Company-Id': activeCompanyId } : {})
+    };
+    const response = await fetch(`/api/salary/receipts/${receiptId}/pdf`, { headers });
     if (!response.ok) throw new Error('Failed to download salary receipt PDF');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -350,6 +402,36 @@ export const api = {
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
   },
+
+  previewReceiptPdf: async (receiptId: string) => {
+    const token = localStorage.getItem('hrms_token');
+    const activeCompanyId = localStorage.getItem('hrms_active_company_id');
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeCompanyId ? { 'X-Company-Id': activeCompanyId } : {})
+    };
+    const response = await fetch(`/api/salary/receipts/${receiptId}/pdf`, { headers });
+    if (!response.ok) throw new Error('Failed to load salary receipt PDF');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  },
+
+  prepareSalaryReceipt: (data: { employeePayrollId?: string; employeeId?: string; period?: string }) =>
+    request<{
+      receiptId: string;
+      receiptNumber: string;
+      snapshot: any;
+      emailTo: string;
+      employeeName: string;
+      period: string;
+      companyName: string;
+      netSalary: number;
+      amountInWords: string;
+    }>('/salary/prepare-receipt', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
 
   sendSalaryReceiptMail: (data: { employeePayrollId?: string; employeeId?: string; period?: string }) =>
     request<{ receiptId: string; receiptNumber: string; emailSent: boolean; emailTo: string; emailPreviewUrl?: string; error?: string }>('/salary/send-receipt-mail', {
@@ -642,5 +724,182 @@ export const api = {
   deleteDeviceSetting: (id: string) =>
     request<{ success: boolean }>(`/settings/devices/${id}`, {
       method: 'DELETE'
+    }),
+
+  // Exit Management
+  getExitDashboard: (params: { brandId?: string; status?: string; search?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
+    if (params.status && params.status !== 'ALL') sp.append('status', params.status);
+    if (params.search && params.search.trim()) sp.append('search', params.search.trim());
+    return request<ExitDashboardData>(`/exit/dashboard?${sp.toString()}`);
+  },
+
+  submitResignation: (data: {
+    employeeId?: string;
+    resignationDate?: string;
+    reason: string;
+    proposedLastWorkingDay?: string;
+    employeeRemarks?: string;
+  }) => request<ExitRequest>('/exit/submit', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
+  approveResignation: (id: string, data: { hrRemarks?: string; confirmedLastWorkingDay?: string } = {}) =>
+    request<ExitRequest>(`/exit/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  rejectResignation: (id: string, data: { hrRemarks: string }) =>
+    request<ExitRequest>(`/exit/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateLastWorkingDay: (id: string, data: { lastWorkingDay: string; hrRemarks?: string }) =>
+    request<ExitRequest>(`/exit/${id}/last-working-day`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    }),
+
+  withdrawResignation: (id: string, data: { reason: string }) =>
+    request<ExitRequest>(`/exit/${id}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateExitChecklist: (id: string, data: {
+    handoverCompleted?: boolean;
+    tasksHandedOver?: boolean;
+    docsHandedOver?: boolean;
+    hrClearanceCompleted?: boolean;
+    checklistNotes?: string;
+  }) => request<ExitRequest>(`/exit/${id}/checklist`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+
+  getExitAssets: (id: string) =>
+    request<{
+      assignedAssets: Asset[];
+      assetHistory: any[];
+      assetClearanceCompleted: boolean;
+      assetClearanceNotes?: string;
+      assetClearedAt?: string;
+    }>(`/exit/${id}/assets`),
+
+  clearExitAsset: (id: string, assetId: string, action: 'RETURNED' | 'DAMAGED', notes?: string) =>
+    request<{ success: boolean; assetId: string; status: string; remainingCount: number; autoCleared: boolean }>(
+      `/exit/${id}/assets/${assetId}/clear`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ action, notes })
+      }
+    ),
+
+  toggleManualAssetClearance: (id: string, data: { completed: boolean; notes?: string }) =>
+    request<ExitRequest>(`/exit/${id}/assets/manual-clear`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  previewRelievingLetter: (id: string) =>
+    request<RelievingLetterPreview>(`/exit/${id}/relieving-letter/preview`),
+
+  issueRelievingLetter: (id: string) =>
+    request<{ exitRequest: ExitRequest; document: any; pdfBase64: string }>(
+      `/exit/${id}/relieving-letter/issue`,
+      { method: 'POST' }
+    ),
+
+  completeExit: (id: string) =>
+    request<ExitRequest>(`/exit/${id}/complete`, { method: 'POST' }),
+
+  // In-App Notifications
+  getNotifications: (params: { page?: number; limit?: number; isRead?: boolean; type?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.page) sp.append('page', params.page.toString());
+    if (params.limit) sp.append('limit', params.limit.toString());
+    if (params.isRead !== undefined) sp.append('isRead', params.isRead.toString());
+    if (params.type && params.type !== 'ALL') sp.append('type', params.type);
+    return requestWithMeta<NotificationItem[], NotificationPagination>(`/notifications?${sp.toString()}`);
+  },
+
+  getUnreadNotificationCount: () =>
+    request<{ unreadCount: number }>('/notifications/unread-count'),
+
+  markNotificationAsRead: (id: string) =>
+    request<NotificationItem>(`/notifications/${id}/read`, { method: 'PATCH' }),
+
+  markAllNotificationsAsRead: () =>
+    request<{ updatedCount: number }>('/notifications/read-all', { method: 'PATCH' }),
+
+  // Company Management (Platform Super Admin)
+  getCompanies: (params?: { search?: string; status?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.search) sp.append('search', params.search);
+    if (params?.status) sp.append('status', params.status);
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    return request<Company[]>(`/companies${qs}`);
+  },
+
+  getCompanyById: (id: string) => request<Company>(`/companies/${id}`),
+
+  getCompanyOverview: (id: string) =>
+    request<{
+      company: Company;
+      brands: any[];
+      employeeCount: number;
+      punchingDeviceCount: number;
+      adminMemberships: any[];
+      activeExitCount: number;
+    }>(`/companies/${id}/overview`),
+
+  createCompany: (data: {
+    name: string;
+    code: string;
+    email: string;
+    phone?: string;
+    address?: string;
+    registrationNumber?: string;
+    taxNumber?: string;
+    adminEmail?: string;
+    adminPassword?: string;
+    adminFirstName?: string;
+    adminLastName?: string;
+  }) =>
+    request<Company>('/companies', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateCompany: (id: string, data: Partial<Company>) =>
+    request<Company>(`/companies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  toggleCompanyStatus: (id: string, isActive: boolean) =>
+    request<Company>(`/companies/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive })
+    }),
+
+  assignCompanyAdmin: (
+    id: string,
+    data: {
+      userId?: string;
+      email?: string;
+      password?: string;
+      firstName?: string;
+      lastName?: string;
+      role?: string;
+    }
+  ) =>
+    request<any>(`/companies/${id}/admins`, {
+      method: 'POST',
+      body: JSON.stringify(data)
     })
 };

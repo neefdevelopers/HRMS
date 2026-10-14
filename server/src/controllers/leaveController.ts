@@ -4,11 +4,17 @@ import { prisma } from '../config/prisma.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { Role } from '../middleware/rbac.js';
+import { notificationService } from '../services/notificationService.js';
 
 export const getLeaveTypes = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
+    const effectiveCompanyId = req.effectiveCompanyId;
+
     const where: any = {};
+    if (effectiveCompanyId) {
+      where.brand = { companyId: effectiveCompanyId };
+    }
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
     }
@@ -31,6 +37,15 @@ export const getLeaveBalances = async (req: AuthenticatedRequest, res: Response)
       return sendError(res, 'Employee ID is required', 400);
     }
 
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee) {
+      return sendError(res, 'Employee not found', 404);
+    }
+
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied for this employee record.', 403);
+    }
+
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
 
     const balances = await prisma.leaveBalance.findMany({
@@ -49,12 +64,22 @@ export const getLeaveRequests = async (req: AuthenticatedRequest, res: Response)
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
     const status = req.query.status as string;
     const employeeId = req.query.employeeId as string;
+    const effectiveCompanyId = req.effectiveCompanyId;
 
     const where: any = {};
 
+    if (effectiveCompanyId) {
+      where.brand = { companyId: effectiveCompanyId };
+    }
+
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
         where.brandId = req.user.brandId;
       }
@@ -112,6 +137,7 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
       const defaultEmp = await prisma.employee.findFirst({
         where: {
           employeeStatus: 'ACTIVE',
+          ...(req.effectiveCompanyId ? { companyId: req.effectiveCompanyId } : {}),
           ...(brandId && brandId !== 'all' ? { brandId } : {})
         }
       });
@@ -130,6 +156,11 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
 
     if (!employee) {
       return sendError(res, 'Employee not found', 404);
+    }
+
+    // Company boundary validation
+    if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Employee belongs to another company.', 403);
     }
 
     // Check for overlapping leaves
@@ -152,6 +183,7 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
 
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
+        companyId: employee.companyId,
         employeeId: targetEmployeeId,
         leaveTypeId: data.leaveTypeId,
         brandId: employee.brandId,
@@ -187,6 +219,7 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
           status: 'ON_LEAVE'
         },
         create: {
+          companyId: employee.companyId,
           employeeId: employee.id,
           brandId: employee.brandId,
           branchId: employee.branchId,
@@ -196,6 +229,38 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
           workingHours: 0.0
         }
       });
+    }
+
+    // Notify approver/HR or employee
+    try {
+      if (req.user?.role === Role.EMPLOYEE) {
+        const approverUserIds = await notificationService.getApproverUserIdsForEmployee(targetEmployeeId);
+        await notificationService.notifyUsers(approverUserIds, {
+          title: 'New Leave Request Submitted',
+          message: `${employee.firstName} ${employee.lastName} applied for leave from ${data.startDate} to ${data.endDate}.`,
+          type: 'LEAVE',
+          module: 'leave',
+          recordId: leaveRequest.id,
+          actionUrl: '/leave',
+          eventKeyPrefix: `leave-apply-${leaveRequest.id}`
+        });
+      } else {
+        const empUserId = await notificationService.getUserIdByEmployeeId(targetEmployeeId);
+        if (empUserId && empUserId !== req.user?.id) {
+          await notificationService.createNotification({
+            userId: empUserId,
+            title: 'Leave Recorded by HR',
+            message: `Leave has been recorded for you from ${data.startDate} to ${data.endDate}.`,
+            type: 'LEAVE',
+            module: 'leave',
+            recordId: leaveRequest.id,
+            actionUrl: '/leave',
+            eventKey: `leave-recorded-${leaveRequest.id}`
+          });
+        }
+      }
+    } catch (notifErr: any) {
+      console.error('[LeaveController] Notification error on applyLeave:', notifErr.message);
     }
 
     return sendSuccess(res, leaveRequest, 'Leave recorded successfully', undefined, 201);
@@ -211,10 +276,15 @@ export const deleteLeave = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const leave = await prisma.leaveRequest.findUnique({
-      where: { id }
+      where: { id },
+      include: { employee: true }
     });
     if (!leave) {
       return sendError(res, 'Leave record not found', 404);
+    }
+
+    if (req.effectiveCompanyId && leave.employee.companyId && leave.employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Record belongs to another company.', 403);
     }
 
     // Clean up any related approval records
@@ -264,6 +334,10 @@ export const reviewLeave = async (req: AuthenticatedRequest, res: Response) => {
       return sendError(res, 'Leave request not found', 404);
     }
 
+    if (req.effectiveCompanyId && leave.employee.companyId && leave.employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Record belongs to another company.', 403);
+    }
+
     const updated = await prisma.leaveRequest.update({
       where: { id },
       data: {
@@ -301,6 +375,7 @@ export const reviewLeave = async (req: AuthenticatedRequest, res: Response) => {
             status: leave.isHalfDay ? 'HALF_DAY' : 'ON_LEAVE'
           },
           create: {
+            companyId: leave.employee.companyId,
             employeeId: leave.employeeId,
             brandId: leave.brandId,
             branchId: leave.employee.branchId,
@@ -309,6 +384,28 @@ export const reviewLeave = async (req: AuthenticatedRequest, res: Response) => {
           }
         });
       }
+    }
+
+    // Notify employee of review outcome
+    try {
+      const empUserId = await notificationService.getUserIdByEmployeeId(leave.employeeId);
+      if (empUserId) {
+        const isApproved = status === 'APPROVED';
+        const title = isApproved ? 'Leave Request Approved' : 'Leave Request Rejected';
+        const reasonSnippet = !isApproved && rejectionReason ? ` Reason: ${rejectionReason}` : '';
+        await notificationService.createNotification({
+          userId: empUserId,
+          title,
+          message: `Your leave request for ${leave.startDate} to ${leave.endDate} was ${status.toLowerCase()}.${reasonSnippet}`,
+          type: 'LEAVE',
+          module: 'leave',
+          recordId: leave.id,
+          actionUrl: '/leave',
+          eventKey: `leave-review-${leave.id}-${status}`
+        });
+      }
+    } catch (notifErr: any) {
+      console.error('[LeaveController] Notification error on reviewLeave:', notifErr.message);
     }
 
     return sendSuccess(res, updated, `Leave request ${status.toLowerCase()} successfully`);

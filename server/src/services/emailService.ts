@@ -1,4 +1,5 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import { systemSettingService, DEFAULT_API_SETTINGS } from './systemSettingService.js';
 
 export interface SendSalaryReceiptEmailOptions {
   to: string;
@@ -21,23 +22,52 @@ export interface EmailResult {
 class EmailService {
   private transporter: Transporter | null = null;
   private isTestAccount = false;
+  private senderEmail: string | null = null;
 
-  private async getTransporter(): Promise<Transporter> {
-    if (this.transporter) return this.transporter;
+  public resetTransporter(): void {
+    this.transporter = null;
+    this.senderEmail = null;
+    this.isTestAccount = false;
+  }
 
-    const host = process.env.SMTP_HOST;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
+  private async getTransporter(): Promise<{ transporter: Transporter; senderEmail: string }> {
+    let host = process.env.SMTP_HOST;
+    let user = process.env.SMTP_USER;
+    let pass = process.env.SMTP_PASS;
+    let port = Number(process.env.SMTP_PORT) || 587;
+    let secure = process.env.SMTP_SECURE === 'true';
+
+    // If not in .env, check database system settings
+    if (!host || !user || !pass) {
+      try {
+        const apiConfig = await systemSettingService.getSettingValue('api.config', DEFAULT_API_SETTINGS);
+        if (apiConfig.smtpHost && apiConfig.smtpUser && apiConfig.smtpPassword) {
+          host = apiConfig.smtpHost;
+          user = apiConfig.smtpUser;
+          pass = apiConfig.smtpPassword;
+          port = Number(apiConfig.smtpPort) || 587;
+          secure = Boolean(apiConfig.smtpSecure);
+        }
+      } catch (err) {
+        // ignore fallback error
+      }
+    }
 
     if (host && user && pass) {
-      this.transporter = nodemailer.createTransport({
+      const liveTransporter = nodemailer.createTransport({
         host,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true',
+        port,
+        secure,
         auth: { user, pass }
       });
-      console.log(`[EmailService] Configured live SMTP transport with host: ${host}`);
-    } else {
+      console.log(`[EmailService] Configured live SMTP transport with host: ${host} (User: ${user})`);
+      return { transporter: liveTransporter, senderEmail: user };
+    }
+
+    // Reuse test account if already created
+    if (this.transporter && this.senderEmail && this.isTestAccount) {
+      return { transporter: this.transporter, senderEmail: this.senderEmail };
+    }
       // Create ethereal test account for development/demo
       try {
         const testAccount = await nodemailer.createTestAccount();
@@ -51,24 +81,25 @@ class EmailService {
           }
         });
         this.isTestAccount = true;
+        this.senderEmail = testAccount.user;
         console.log(`[EmailService] Using Ethereal test mail transporter (User: ${testAccount.user})`);
       } catch (err) {
         console.warn('[EmailService] Failed to create test account, using JSON/stream transporter fallback', err);
         this.transporter = nodemailer.createTransport({
           jsonTransport: true
         });
+        this.senderEmail = 'payroll@hrms.local';
       }
-    }
 
-    return this.transporter;
-  }
+      return { transporter: this.transporter!, senderEmail: this.senderEmail || 'payroll@hrms.local' };
+    }
 
   /**
    * Send salary receipt email with attached PDF payslip
    */
   async sendSalaryReceiptEmail(options: SendSalaryReceiptEmailOptions): Promise<EmailResult> {
     try {
-      const transporter = await this.getTransporter();
+      const { transporter, senderEmail } = await this.getTransporter();
       const currency = options.currency || 'INR';
       const company = options.companyName || 'Apex Omnichannel Retail Enterprises';
       const formattedSalary = options.netSalary.toLocaleString('en-IN', {
@@ -144,7 +175,7 @@ class EmailService {
         </html>
       `;
 
-      const fromAddress = process.env.SMTP_FROM || `"${company} Payroll" <payroll@hrms.local>`;
+      const fromAddress = process.env.SMTP_FROM || `"${company} Payroll" <${senderEmail}>`;
 
       const info = await transporter.sendMail({
         from: fromAddress,

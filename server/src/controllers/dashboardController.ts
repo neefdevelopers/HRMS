@@ -13,15 +13,56 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
     const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
+    const effectiveCompanyId = req.effectiveCompanyId;
 
-    // 1. Build Base Filter for Brand / Branch / Department
+    // Platform Super Admin without specific company selected: return platform overview
+    if (req.user?.platformRole === Role.SUPER_ADMIN && !effectiveCompanyId && req.query.scope === 'platform') {
+      const totalCompanies = await prisma.company.count();
+      const activeCompanies = await prisma.company.count({ where: { isActive: true } });
+      const totalBrands = await prisma.brand.count();
+      const totalEmployees = await prisma.employee.count({ where: { employeeStatus: 'ACTIVE' } });
+      const companies = await prisma.company.findMany({
+        include: {
+          _count: {
+            select: {
+              brands: true,
+              employees: true,
+              users: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return sendSuccess(res, {
+        isPlatformView: true,
+        kpis: {
+          totalCompanies,
+          activeCompanies,
+          totalBrands,
+          totalEmployees
+        },
+        companies
+      });
+    }
+
+    // 1. Build Base Filter for Company / Brand / Branch / Department
     const employeeBaseFilter: any = {
       employeeStatus: 'ACTIVE'
     };
 
+    if (effectiveCompanyId) {
+      employeeBaseFilter.companyId = effectiveCompanyId;
+    }
+
     if (brandId && brandId !== 'all') {
       employeeBaseFilter.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
         employeeBaseFilter.brandId = req.user.brandId;
       }
@@ -35,10 +76,17 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       where: employeeBaseFilter
     });
 
-    // 3. Brand-wise Employee Distribution
-    // Group-level view or single brand view
+    // 3. Brand-wise Employee Distribution (Scoped to Company)
+    const brandQuery: any = {};
+    if (effectiveCompanyId) {
+      brandQuery.companyId = effectiveCompanyId;
+    }
+    if (employeeBaseFilter.brandId) {
+      brandQuery.id = employeeBaseFilter.brandId;
+    }
+
     const allBrands = await prisma.brand.findMany({
-      where: employeeBaseFilter.brandId ? { id: employeeBaseFilter.brandId } : {},
+      where: brandQuery,
       select: { id: true, name: true, code: true }
     });
 
@@ -95,12 +143,11 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       if (att.status === 'PRESENT') presentCount++;
       else if (att.status === 'LATE') {
         lateCount++;
-        presentCount++; // Late employees are also present
+        presentCount++;
       } else if (att.status === 'HALF_DAY') halfDayCount++;
       else if (att.status === 'ON_LEAVE') onLeaveCount++;
     });
 
-    // Also check approved leaves covering selectedDate if not yet reflected in attendance
     const approvedLeavesOnDate = await prisma.leaveRequest.count({
       where: {
         status: 'APPROVED',
@@ -111,15 +158,13 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     });
 
     const finalLeaveCount = Math.max(onLeaveCount, approvedLeavesOnDate);
-
-    // Absent = Active employees minus (Present + Late + On Leave + Half-day)
     const accountedEmployees = presentCount + finalLeaveCount + halfDayCount;
     const absentCount = Math.max(0, totalEmployees - accountedEmployees);
 
     const presentPercentage = totalEmployees > 0 ? Number(((presentCount / totalEmployees) * 100).toFixed(1)) : 0;
     const absentPercentage = totalEmployees > 0 ? Number(((absentCount / totalEmployees) * 100).toFixed(1)) : 0;
 
-    // 5. New Joiners (within last 30 days or specified date range)
+    // 5. New Joiners
     const newJoiners = await prisma.employee.findMany({
       where: {
         ...employeeBaseFilter,
@@ -144,7 +189,6 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     });
 
     // 6. Pending Approvals
-    // Check pending leave requests & attendance regularizations
     const pendingLeaveApprovals = await prisma.leaveRequest.findMany({
       where: {
         status: 'PENDING',
@@ -174,15 +218,22 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       }
     });
 
-    // 8. Payroll Summary (Authorized for Super Admin, Group HR, Brand HR)
+    // 7. Payroll Summary
     let payrollSummary: any = null;
-    const canViewPayroll = [Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR].includes(req.user?.role as any);
+    const canViewPayroll = [
+      Role.SUPER_ADMIN,
+      Role.COMPANY_ADMIN,
+      Role.COMPANY_HR,
+      Role.GROUP_HR,
+      Role.BRAND_HR
+    ].includes(req.user?.role as any);
 
     if (canViewPayroll) {
-      const currentPeriod = selectedDate.substring(0, 7); // e.g. "2026-10"
+      const currentPeriod = selectedDate.substring(0, 7);
       const payrollRecord = await prisma.payrollSummary.findFirst({
         where: {
           period: currentPeriod,
+          ...(effectiveCompanyId ? { companyId: effectiveCompanyId } : {}),
           ...(employeeBaseFilter.brandId ? { brandId: employeeBaseFilter.brandId } : {})
         },
         include: { brand: { select: { name: true } } }
@@ -207,7 +258,7 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
-    // 9. Attendance 7-Day Trend Chart
+    // 8. Attendance 7-Day Trend Chart
     const trendDates: string[] = [];
     const trendAnchor = new Date(selectedDate);
     for (let i = 6; i >= 0; i--) {

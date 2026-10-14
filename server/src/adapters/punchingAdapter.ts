@@ -163,7 +163,7 @@ export class PunchSyncService {
         }
 
         // Find associated employee
-        const employee = await prisma.employee.findUnique({
+        const employee = await prisma.employee.findFirst({
           where: { biometricId: punch.biometricId }
         });
 

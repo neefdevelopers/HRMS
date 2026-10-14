@@ -23,7 +23,6 @@ import { AttendanceChart } from '../components/dashboard/AttendanceChart';
 import { BrandDistributionChart } from '../components/dashboard/BrandDistributionChart';
 import { AttendanceTable } from '../components/dashboard/AttendanceTable';
 import { RecentJoinersList } from '../components/dashboard/RecentJoinersList';
-import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
 import { PayrollSummaryCard } from '../components/dashboard/PayrollSummaryCard';
 import { KPISkeleton } from '../components/common/Skeleton';
 
@@ -325,12 +324,8 @@ export const DashboardPage: React.FC = () => {
       />
 
       {/* 5. Additional Operational Sections Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <RecentJoinersList joiners={metrics?.newJoiners || []} />
-        <PendingApprovalsList
-          approvals={metrics?.pendingApprovals || []}
-          onRefresh={loadDashboard}
-        />
         <PayrollSummaryCard payroll={metrics?.payrollSummary} />
       </div>
     </div>

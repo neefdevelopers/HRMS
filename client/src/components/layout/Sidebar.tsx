@@ -7,29 +7,39 @@ import {
   CalendarRange,
   CalendarCheck2,
   Building,
+  Building2,
   FileBarChart2,
   Banknote,
   Cpu,
-  FolderArchive,
-  Settings
+  Laptop,
+  Settings,
+  LogOut,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const Sidebar: React.FC = () => {
-  const { user } = useAuth();
-  const isSuperAdminOrGroupHr = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR';
+  const { user, isSuperAdmin } = useAuth();
+  const isSuperAdminOrCompanyHr =
+    isSuperAdmin ||
+    user?.role === 'COMPANY_ADMIN' ||
+    user?.role === 'COMPANY_HR' ||
+    user?.role === 'GROUP_HR';
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    ...(isSuperAdmin ? [{ label: 'Companies (SaaS)', path: '/companies', icon: Building2 }] : []),
     { label: 'Employees', path: '/employees', icon: Users },
     { label: 'Attendance & Punching', path: '/attendance', icon: Clock },
     { label: 'Shift Management', path: '/shifts', icon: CalendarRange },
     { label: 'Leaves & Approvals', path: '/leave', icon: CalendarCheck2 },
     { label: 'Salary Module', path: '/salary', icon: Banknote },
-    { label: 'Assets & Documents', path: '/assets-documents', icon: FolderArchive },
+    { label: 'Assets', path: '/assets', icon: Laptop },
+    { label: 'Exit Management', path: '/exit', icon: LogOut },
+    { label: 'Notifications', path: '/notifications', icon: Bell },
     { label: 'Brands & Branches', path: '/brands', icon: Building },
     { label: 'Reports', path: '/reports', icon: FileBarChart2 },
-    ...(isSuperAdminOrGroupHr ? [{ label: 'System Settings', path: '/settings', icon: Settings }] : [])
+    ...(isSuperAdminOrCompanyHr ? [{ label: 'System Settings', path: '/settings', icon: Settings }] : [])
   ];
 
   return (

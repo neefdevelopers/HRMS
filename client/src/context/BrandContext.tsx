@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Brand } from '../types';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
+import { useCompany } from './CompanyContext';
 
 interface BrandContextType {
   brands: Brand[];
@@ -16,6 +17,7 @@ const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, canAccessAllBrands } = useAuth();
+  const { activeCompanyId } = useCompany();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrandId, setSelectedBrandIdState] = useState<string>(() => {
     return localStorage.getItem('hrms_selected_brand') || 'all';
@@ -34,7 +36,7 @@ export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedBrandIdState(user.brandId);
         localStorage.setItem('hrms_selected_brand', user.brandId);
       } else if (selectedBrandId !== 'all' && !data.find(b => b.id === selectedBrandId)) {
-        // If stored brandId no longer exists
+        // If stored brandId no longer exists in current company
         setSelectedBrandIdState('all');
         localStorage.setItem('hrms_selected_brand', 'all');
       }
@@ -49,7 +51,7 @@ export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (user) {
       fetchBrands();
     }
-  }, [user]);
+  }, [user, activeCompanyId]);
 
   const setSelectedBrandId = (id: string) => {
     if (!canAccessAllBrands && id === 'all') return;

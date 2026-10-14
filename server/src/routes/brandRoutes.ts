@@ -4,6 +4,7 @@ import {
   getBrandById,
   createBrand,
   updateBrand,
+  toggleBrandStatus,
   getBranches,
   getDepartments,
   getDesignations,
@@ -23,7 +24,25 @@ router.get('/designations', enforceBrandAccess, getDesignations);
 router.get('/shifts', enforceBrandAccess, getShifts);
 
 router.get('/:id', getBrandById);
-router.post('/', authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR), createBrand);
-router.put('/:id', authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR), updateBrand);
+
+// Brand creation, update, and status toggle are strictly restricted to Super Admin, Company Admin, and Company HR.
+// Brand HR and lower roles are NOT permitted to manage brands.
+router.post(
+  '/',
+  authorizeRoles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.COMPANY_HR, Role.GROUP_HR),
+  createBrand
+);
+
+router.put(
+  '/:id',
+  authorizeRoles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.COMPANY_HR, Role.GROUP_HR),
+  updateBrand
+);
+
+router.patch(
+  '/:id/status',
+  authorizeRoles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.COMPANY_HR, Role.GROUP_HR),
+  toggleBrandStatus
+);
 
 export default router;

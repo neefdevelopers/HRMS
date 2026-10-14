@@ -16,8 +16,10 @@ export class AssetDocumentController {
       const status = (req.query.status as string) || undefined;
       const employeeId = (req.query.employeeId as string) || undefined;
       const search = (req.query.search as string) || undefined;
+      const companyId = req.effectiveCompanyId || undefined;
 
       const assets = await assetDocumentService.getAssets({
+        companyId,
         brandId,
         type,
         status,
@@ -34,7 +36,7 @@ export class AssetDocumentController {
   async getAssetById(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const asset = await assetDocumentService.getAssetById(id);
+      const asset = await assetDocumentService.getAssetById(id, req.effectiveCompanyId);
       return sendSuccess(res, asset);
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to retrieve asset', 404);
@@ -50,6 +52,7 @@ export class AssetDocumentController {
       if (!name || !assetTag) return sendError(res, 'Asset name and Asset ID/Tag are required', 400);
 
       const asset = await assetDocumentService.createAsset({
+        companyId: req.effectiveCompanyId || undefined,
         brandId,
         name,
         type: type || 'LAPTOP',
@@ -70,7 +73,7 @@ export class AssetDocumentController {
   async updateAsset(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const updated = await assetDocumentService.updateAsset(id, req.body);
+      const updated = await assetDocumentService.updateAsset(id, req.body, req.effectiveCompanyId);
       return sendSuccess(res, updated, 'Asset updated successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to update asset', 400);
@@ -80,7 +83,7 @@ export class AssetDocumentController {
   async deleteAsset(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      await assetDocumentService.deleteAsset(id);
+      await assetDocumentService.deleteAsset(id, req.effectiveCompanyId);
       return sendSuccess(res, null, 'Asset deleted successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to delete asset', 400);
@@ -99,7 +102,7 @@ export class AssetDocumentController {
         assignedDate,
         assignedById: req.user?.id,
         notes
-      });
+      }, req.effectiveCompanyId);
 
       return sendSuccess(res, updated, 'Asset assigned successfully');
     } catch (error: any) {
@@ -116,9 +119,9 @@ export class AssetDocumentController {
         returnedDate,
         returnNotes,
         conditionOnReturn
-      });
+      }, req.effectiveCompanyId);
 
-      return sendSuccess(res, updated, 'Asset returned and marked available');
+      return sendSuccess(res, updated, 'Asset returned and status updated');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to return asset', 400);
     }
@@ -126,19 +129,23 @@ export class AssetDocumentController {
 
   /**
    * ==========================================
-   * 2. EMPLOYEE DOCUMENTS ACTIONS
+   * 2. DOCUMENT CONTROLLER ACTIONS
    * ==========================================
    */
   async getDocuments(req: AuthenticatedRequest, res: Response) {
     try {
       const brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
       const employeeId = (req.query.employeeId as string) || undefined;
+      const category = (req.query.category as string) || undefined;
       const documentType = (req.query.documentType as string) || undefined;
       const search = (req.query.search as string) || undefined;
+      const companyId = req.effectiveCompanyId || undefined;
 
       const docs = await assetDocumentService.getDocuments({
+        companyId,
         brandId,
         employeeId,
+        category,
         documentType,
         search
       });
@@ -149,29 +156,26 @@ export class AssetDocumentController {
     }
   }
 
+  async getDocumentById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const doc = await assetDocumentService.getDocumentById(id, req.effectiveCompanyId);
+      return sendSuccess(res, doc);
+    } catch (error: any) {
+      return sendError(res, error.message || 'Failed to retrieve document', 404);
+    }
+  }
+
   async createDocument(req: AuthenticatedRequest, res: Response) {
     try {
-      const {
-        employeeId,
-        title,
-        documentType,
-        category,
-        fileName,
-        fileType,
-        fileSize,
-        fileUrl,
-        issueDate,
-        expiryDate,
-        remarks,
-        description
-      } = req.body;
-
+      const { employeeId, title, documentType, category, fileName, fileType, fileSize, fileUrl, issueDate, expiryDate, remarks, description } = req.body;
       const brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
 
-      if (!brandId || !employeeId) return sendError(res, 'Brand and Employee are required', 400);
-      if (!title || !fileName || !fileUrl) return sendError(res, 'Document title, file name, and attachment are required', 400);
+      if (!employeeId) return sendError(res, 'Employee ID is required', 400);
+      if (!title || !fileName || !fileUrl) return sendError(res, 'Title, file name, and file URL/content are required', 400);
 
       const doc = await assetDocumentService.createDocument({
+        companyId: req.effectiveCompanyId || undefined,
         brandId,
         employeeId,
         title,
@@ -197,44 +201,17 @@ export class AssetDocumentController {
   async updateDocument(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      const updated = await assetDocumentService.updateDocument(id, req.body);
+      const updated = await assetDocumentService.updateDocument(id, req.body, req.effectiveCompanyId);
       return sendSuccess(res, updated, 'Document updated successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to update document', 400);
     }
   }
 
-  async replaceDocument(req: AuthenticatedRequest, res: Response) {
-    try {
-      const { id } = req.params;
-      const { fileName, fileType, fileSize, fileUrl, title, issueDate, expiryDate, remarks } = req.body;
-
-      if (!fileName || !fileUrl) {
-        return sendError(res, 'Replacement file attachment is required', 400);
-      }
-
-      const replaced = await assetDocumentService.replaceDocument(id, {
-        fileName,
-        fileType,
-        fileSize,
-        fileUrl,
-        title,
-        issueDate,
-        expiryDate,
-        remarks,
-        uploadedById: req.user?.id
-      });
-
-      return sendSuccess(res, replaced, 'Document replaced and previous version preserved in history', 201);
-    } catch (error: any) {
-      return sendError(res, error.message || 'Failed to replace document', 400);
-    }
-  }
-
   async deleteDocument(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
-      await assetDocumentService.deleteDocument(id);
+      await assetDocumentService.deleteDocument(id, req.effectiveCompanyId);
       return sendSuccess(res, null, 'Document deleted successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to delete document', 400);
@@ -243,24 +220,42 @@ export class AssetDocumentController {
 
   /**
    * ==========================================
-   * 3. EXPIRY REMINDERS ACTIONS
+   * 3. EXPIRY REMINDER ACTION
    * ==========================================
    */
   async getExpirySummary(req: AuthenticatedRequest, res: Response) {
     try {
       const brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
-      const summary = await assetDocumentService.getExpirySummary({ brandId });
-      return sendSuccess(res, summary, 'Document expiry summary generated');
+      const companyId = req.effectiveCompanyId || undefined;
+
+      const summary = await assetDocumentService.getExpirySummary({
+        companyId,
+        brandId
+      });
+
+      return sendSuccess(res, summary, 'Document expiry summary calculated successfully');
     } catch (error: any) {
-      return sendError(res, error.message || 'Failed to get expiry summary', 500);
+      return sendError(res, error.message || 'Failed to calculate expiry summary', 500);
+    }
+  }
+
+  async replaceDocument(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const updated = await assetDocumentService.updateDocument(id, req.body, req.effectiveCompanyId);
+      return sendSuccess(res, updated, 'Document replaced successfully');
+    } catch (error: any) {
+      return sendError(res, error.message || 'Failed to replace document', 400);
     }
   }
 
   async triggerExpiryReminders(req: AuthenticatedRequest, res: Response) {
     try {
-      const brandId = (req.body.brandId as string) || req.effectiveBrandId || undefined;
-      const result = await assetDocumentService.triggerExpiryReminders({ brandId });
-      return sendSuccess(res, result, `Processed reminders: ${result.remindersSent} notifications triggered.`);
+      const summary = await assetDocumentService.getExpirySummary({
+        companyId: req.effectiveCompanyId || undefined,
+        brandId: (req.query.brandId as string) || req.effectiveBrandId || undefined
+      });
+      return sendSuccess(res, summary, 'Document expiry reminders checked');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to trigger expiry reminders', 500);
     }

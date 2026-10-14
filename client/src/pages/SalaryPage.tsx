@@ -15,7 +15,10 @@ import {
   Sparkles,
   Info,
   Mail,
-  Download
+  Download,
+  FileText,
+  ExternalLink,
+  Send
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useBrand } from '../context/BrandContext';
@@ -118,6 +121,14 @@ export const SalaryPage: React.FC = () => {
     reason: ''
   });
 
+  // Receipt Preview & Mail Modal
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [previewReceiptItem, setPreviewReceiptItem] = useState<SalaryOverviewItem | null>(null);
+  const [receiptDetails, setReceiptDetails] = useState<any | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [sendingReceiptEmail, setSendingReceiptEmail] = useState(false);
+  const [emailSuccessInfo, setEmailSuccessInfo] = useState<{ message: string; previewUrl?: string } | null>(null);
+
   const loadSalaryData = async () => {
     try {
       setLoading(true);
@@ -211,6 +222,53 @@ export const SalaryPage: React.FC = () => {
       alert(err.message || 'Failed to email salary receipt');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Open Receipt Preview Modal before sending email
+  const handleOpenReceiptPreview = async (item: SalaryOverviewItem) => {
+    setPreviewReceiptItem(item);
+    setEmailSuccessInfo(null);
+    setIsReceiptModalOpen(true);
+    setReceiptLoading(true);
+    setReceiptDetails(null);
+
+    try {
+      const res = await api.prepareSalaryReceipt({
+        employeeId: item.employeeId,
+        period: selectedPeriod
+      });
+      setReceiptDetails(res);
+    } catch (err: any) {
+      console.error('Failed to prepare receipt:', err);
+      setMessage({ type: 'error', text: err.message || 'Failed to prepare receipt preview' });
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  // Send Email from inside the Receipt Preview Modal
+  const handleSendEmailFromPreview = async () => {
+    if (!previewReceiptItem) return;
+    try {
+      setSendingReceiptEmail(true);
+      const res: any = await api.sendSalaryReceiptMail({
+        employeeId: previewReceiptItem.employeeId,
+        period: selectedPeriod
+      });
+      setEmailSuccessInfo({
+        message: res.message || `Salary receipt successfully emailed to ${previewReceiptItem.employee.email}`,
+        previewUrl: res.data?.emailPreviewUrl || res.emailPreviewUrl
+      });
+      setMessage({
+        type: 'success',
+        text: res.message || `Salary receipt emailed to ${previewReceiptItem.employee.email}`
+      });
+      await loadSalaryData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to send receipt email');
+    } finally {
+      setSendingReceiptEmail(false);
     }
   };
 
@@ -591,19 +649,29 @@ export const SalaryPage: React.FC = () => {
                             onClick={() => handleCalculateSingle(item)}
                             disabled={actionLoading}
                             className="px-2 py-1 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded shadow-2xs transition-colors"
-                            title="Calculate, save, generate receipt and email staff"
+                            title="Calculate, save and prepare receipt"
                           >
                             {item.isSaved ? 'Recalculate' : 'Save'}
                           </button>
                         )}
 
+                        {/* View / Preview Receipt before emailing */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceiptPreview(item)}
+                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title="View / Preview Salary Receipt before emailing"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                        </button>
+
                         {canManageSalary && item.isSaved && (
                           <button
                             type="button"
-                            onClick={() => handleSendReceiptMail(item)}
+                            onClick={() => handleOpenReceiptPreview(item)}
                             disabled={actionLoading}
                             className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title={`Email Salary Receipt to ${item.employee.email}`}
+                            title={`Preview receipt and email to ${item.employee.email}`}
                           >
                             <Mail className="w-3.5 h-3.5" />
                           </button>
@@ -896,13 +964,14 @@ export const SalaryPage: React.FC = () => {
                 {canManageSalary && selectedItem.isSaved && (
                   <button
                     type="button"
-                    onClick={async () => {
-                      await handleSendReceiptMail(selectedItem);
+                    onClick={() => {
+                      setIsDetailsModalOpen(false);
+                      handleOpenReceiptPreview(selectedItem);
                     }}
                     disabled={actionLoading}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
                   >
-                    <Mail className="w-3.5 h-3.5" /> Email Receipt
+                    <FileText className="w-3.5 h-3.5" /> Preview Receipt & Email
                   </button>
                 )}
                 {selectedItem.receiptId && (
@@ -937,6 +1006,269 @@ export const SalaryPage: React.FC = () => {
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 3. Salary Receipt Preview & Send Modal */}
+      <Modal
+        isOpen={isReceiptModalOpen}
+        onClose={() => {
+          setIsReceiptModalOpen(false);
+          setEmailSuccessInfo(null);
+        }}
+        title="Salary Receipt Preview"
+        description="Inspect receipt details and PDF document before emailing to employee."
+        maxWidth="max-w-3xl"
+      >
+        {previewReceiptItem && (
+          <div className="space-y-4">
+            {/* Success message banner */}
+            {emailSuccessInfo && (
+              <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-medium">{emailSuccessInfo.message}</span>
+                </div>
+                {emailSuccessInfo.previewUrl && (
+                  <a
+                    href={emailSuccessInfo.previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-900 underline ml-2"
+                  >
+                    View Test Email <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Email destination indicator */}
+            <div className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs ${
+              previewReceiptItem.employee.email
+                ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Mail className={`w-4 h-4 ${previewReceiptItem.employee.email ? 'text-blue-600' : 'text-amber-600'}`} />
+                <span>
+                  Recipient Email:{' '}
+                  {previewReceiptItem.employee.email ? (
+                    <strong className="font-semibold">{previewReceiptItem.employee.email}</strong>
+                  ) : (
+                    <span className="italic font-medium text-amber-700">No email on record (PDF preview and download still available)</span>
+                  )}
+                </span>
+              </div>
+              <Badge variant={previewReceiptItem.employee.email ? 'info' : 'warning'}>
+                {previewReceiptItem.employee.email ? 'Ready to Dispatch' : 'Email Missing'}
+              </Badge>
+            </div>
+
+            {/* Loading Skeleton */}
+            {receiptLoading && (
+              <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl">
+                <RefreshCw className="w-6 h-6 text-brand-600 animate-spin mx-auto mb-2" />
+                <p className="text-xs text-slate-500 font-medium">Generating receipt snapshot and PDF preview...</p>
+              </div>
+            )}
+
+            {/* Receipt Preview Card */}
+            {!receiptLoading && receiptDetails && (
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                {/* Receipt Header Banner */}
+                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white px-5 py-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] tracking-widest font-semibold uppercase text-blue-400">
+                      {receiptDetails.snapshot?.brandName || previewReceiptItem.employee.brand?.name || 'HRMS'}
+                    </span>
+                    <h4 className="text-sm font-bold tracking-tight text-white">Official Salary Receipt</h4>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block px-2 py-0.5 bg-white/10 rounded font-mono text-[11px] text-blue-200 border border-white/15">
+                      {receiptDetails.receiptNumber}
+                    </span>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Period: <strong className="text-slate-200">{receiptDetails.period}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Employee & Meta Details */}
+                <div className="p-4 bg-slate-50/70 border-b border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Employee Name</span>
+                    <div className="font-semibold text-slate-900 mt-0.5">{receiptDetails.employeeName}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Employee ID</span>
+                    <div className="font-mono font-medium text-slate-800 mt-0.5">{receiptDetails.snapshot?.employeeId}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Department / Role</span>
+                    <div className="font-medium text-slate-800 mt-0.5">
+                      {receiptDetails.snapshot?.department} • {receiptDetails.snapshot?.designation}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Branch / Location</span>
+                    <div className="font-medium text-slate-800 mt-0.5">{receiptDetails.snapshot?.branch}</div>
+                  </div>
+                </div>
+
+                {/* Working Statistics bar */}
+                <div className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between text-xs text-slate-600 flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Present:</span>
+                    <strong className="font-semibold text-slate-800">{receiptDetails.snapshot?.presentDaysCount} days</strong>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Leave/Holiday:</span>
+                    <strong className="font-semibold text-slate-800">{receiptDetails.snapshot?.leaveDaysCount} days</strong>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Working Hours:</span>
+                    <strong className="font-semibold text-slate-800">{receiptDetails.snapshot?.payableWorkingHours} hrs</strong>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Approved OT:</span>
+                    <strong className="font-semibold text-emerald-700">
+                      {receiptDetails.snapshot?.approvedOtHours > 0 ? `+${receiptDetails.snapshot?.approvedOtHours} hrs` : '0 hrs'}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Earnings & Deductions Table */}
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {/* Earnings */}
+                  <div className="space-y-2 border-r border-slate-100 sm:pr-4">
+                    <h5 className="font-bold text-slate-800 pb-1 border-b border-slate-200 flex items-center justify-between">
+                      <span>Earnings</span>
+                      <span className="text-[10px] text-slate-500">Amount (INR)</span>
+                    </h5>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-600">Base Salary</span>
+                      <span className="font-medium text-slate-900">₹{receiptDetails.snapshot?.baseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {receiptDetails.snapshot?.isProrated && (
+                      <div className="flex justify-between py-1 border-b border-slate-100 text-amber-700 bg-amber-50/50 px-1 rounded">
+                        <span>Prorated Payable Pay</span>
+                        <span className="font-semibold">₹{receiptDetails.snapshot?.payableSalary?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-600">Overtime Payment ({receiptDetails.snapshot?.approvedOtHours || 0}h)</span>
+                      <span className="font-medium text-emerald-700">+₹{receiptDetails.snapshot?.otPayment?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-600">Performance Incentives</span>
+                      <span className="font-medium text-emerald-700">+₹{receiptDetails.snapshot?.approvedIncentivesAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 font-bold text-slate-900">
+                      <span>Gross Total Earnings</span>
+                      <span className="text-emerald-700">₹{receiptDetails.snapshot?.grossEarnings?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+
+                  {/* Deductions */}
+                  <div className="space-y-2">
+                    <h5 className="font-bold text-slate-800 pb-1 border-b border-slate-200 flex items-center justify-between">
+                      <span>Deductions</span>
+                      <span className="text-[10px] text-slate-500">Amount (INR)</span>
+                    </h5>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-600">Incomplete Hours ({receiptDetails.snapshot?.incompleteHours || 0}h)</span>
+                      <span className="font-medium text-rose-700">-₹{receiptDetails.snapshot?.incompleteDeductionAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-600">Other Deductions</span>
+                      <span className="font-medium text-rose-700">-₹{receiptDetails.snapshot?.otherDeductions?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 font-bold text-slate-900">
+                      <span>Total Deductions</span>
+                      <span className="text-rose-700">₹{receiptDetails.snapshot?.totalDeductions?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Net Payable Salary Highlight */}
+                <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-950 text-white flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-blue-300">Net Payable Salary</span>
+                    <div className="text-xs italic text-blue-200 mt-0.5 line-clamp-1">
+                      {receiptDetails.amountInWords || receiptDetails.snapshot?.amountInWords}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                      ₹{receiptDetails.netSalary?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-xs font-semibold text-blue-300 ml-1">INR</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex justify-between items-center pt-3 border-t border-slate-200 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                {receiptDetails?.receiptId && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => api.previewReceiptPdf(receiptDetails.receiptId)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors"
+                      title="Open PDF in new tab"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" /> View PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => api.downloadReceiptPdf(receiptDetails.receiptId, receiptDetails.receiptNumber)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+                      title="Download PDF to computer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download PDF
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReceiptModalOpen(false);
+                    setEmailSuccessInfo(null);
+                  }}
+                  className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                >
+                  Close
+                </button>
+
+                {canManageSalary && (
+                  <button
+                    type="button"
+                    onClick={handleSendEmailFromPreview}
+                    disabled={sendingReceiptEmail || receiptLoading || !previewReceiptItem.employee.email}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:pointer-events-none rounded-lg shadow-xs transition-all"
+                    title={previewReceiptItem.employee.email ? `Send receipt to ${previewReceiptItem.employee.email}` : 'No email address available'}
+                  >
+                    {sendingReceiptEmail ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending Email...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send Email Now</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>

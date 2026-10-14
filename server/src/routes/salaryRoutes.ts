@@ -25,7 +25,8 @@ import {
   getOvertimeRecords,
   createOvertimeRecord,
   updateOvertimeStatus,
-  sendSalaryReceiptMailHandler
+  sendSalaryReceiptMailHandler,
+  prepareSalaryReceiptHandler
 } from '../controllers/salaryController.js';
 
 const router = Router();
@@ -192,6 +193,12 @@ router.post(
   '/send-receipt-mail',
   authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
   sendSalaryReceiptMailHandler
+);
+
+router.post(
+  '/prepare-receipt',
+  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  prepareSalaryReceiptHandler
 );
 
 export default router;

@@ -10,14 +10,24 @@ export const getAttendanceReport = async (req: AuthenticatedRequest, res: Respon
     const endDate = (req.query.endDate as string) || new Date().toISOString().split('T')[0];
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
     const format = req.query.format as string; // 'json' or 'csv'
+    const effectiveCompanyId = req.effectiveCompanyId;
 
     const where: any = {
       date: { gte: startDate, lte: endDate }
     };
 
+    if (effectiveCompanyId) {
+      where.brand = { companyId: effectiveCompanyId };
+    }
+
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
         where.brandId = req.user.brandId;
       }
@@ -59,20 +69,16 @@ export const getAttendanceReport = async (req: AuthenticatedRequest, res: Respon
 
     return sendSuccess(res, records);
   } catch (error: any) {
-    return sendError(res, error.message || 'Failed to generate attendance report', 500);
+    return sendError(res, error.message || 'Failed to generate report', 500);
   }
 };
 
 export const getSyncLogs = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const logs = await prisma.punchSyncLog.findMany({
-      take: 25,
-      orderBy: { startTime: 'desc' },
-      include: {
-        device: { select: { deviceName: true, serialNumber: true } }
-      }
+      take: 50,
+      orderBy: { startTime: 'desc' }
     });
-
     return sendSuccess(res, logs);
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to fetch sync logs', 500);

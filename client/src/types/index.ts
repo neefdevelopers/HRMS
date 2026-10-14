@@ -1,4 +1,38 @@
-export type Role = 'SUPER_ADMIN' | 'GROUP_HR' | 'BRAND_HR' | 'MANAGER' | 'EMPLOYEE';
+export type Role = 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_HR' | 'GROUP_HR' | 'BRAND_HR' | 'MANAGER' | 'EMPLOYEE';
+
+export interface Company {
+  id: string;
+  name: string;
+  code: string;
+  logo?: string | null;
+  email: string;
+  phone?: string | null;
+  address?: string | null;
+  registrationNumber?: string | null;
+  taxNumber?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    brands?: number;
+    employees?: number;
+    memberships?: number;
+    departments?: number;
+  };
+}
+
+export interface CompanyMembership {
+  id: string;
+  userId: string;
+  companyId: string;
+  role: Role;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  company?: Company;
+  user?: User;
+}
 
 export interface User {
   id: string;
@@ -7,12 +41,15 @@ export interface User {
   firstName: string;
   lastName: string;
   phone?: string | null;
+  companyId?: string | null;
   brandId?: string | null;
   branchId?: string | null;
   employeeId?: string | null;
+  company?: Company | null;
   brand?: Brand | null;
   branch?: Branch | null;
   employee?: Employee | null;
+  memberships?: CompanyMembership[];
 }
 
 export interface Brand {
@@ -20,6 +57,8 @@ export interface Brand {
   name: string;
   code: string;
   companyName: string;
+  companyId: string;
+  company?: Company;
   logo?: string | null;
   website?: string | null;
   phone?: string | null;
@@ -863,5 +902,150 @@ export interface TestConnectionResult {
   success: boolean;
   message: string;
   status?: number;
+}
+
+// Exit Management Types
+export type ExitRequestStatus =
+  | 'PENDING_APPROVAL'
+  | 'NOTICE_PERIOD'
+  | 'NOTICE_COMPLETED'
+  | 'EXIT_COMPLETED'
+  | 'REJECTED'
+  | 'WITHDRAWN';
+
+export interface ExitRequest {
+  id: string;
+  employeeId: string;
+  brandId: string;
+  resignationDate: string;
+  reason: string;
+  proposedLastWorkingDay: string;
+  noticePeriodDays: number;
+  lastWorkingDay: string;
+  employeeRemarks?: string | null;
+  hrRemarks?: string | null;
+  status: ExitRequestStatus;
+  effectiveStatus?: ExitRequestStatus;
+  remainingNoticeDays?: number;
+
+  approvedAt?: string | null;
+  approvedById?: string | null;
+  rejectedAt?: string | null;
+  rejectedById?: string | null;
+  withdrawnAt?: string | null;
+  withdrawnById?: string | null;
+  withdrawnReason?: string | null;
+
+  handoverCompleted: boolean;
+  tasksHandedOver: boolean;
+  docsHandedOver: boolean;
+  hrClearanceCompleted: boolean;
+  checklistNotes?: string | null;
+  checklistCompletedAt?: string | null;
+  checklistCompletedById?: string | null;
+
+  assetClearanceCompleted: boolean;
+  assetClearanceNotes?: string | null;
+  assetClearedAt?: string | null;
+  assetClearedById?: string | null;
+
+  relievingLetterIssued: boolean;
+  relievingLetterDocId?: string | null;
+  relievingLetterIssuedAt?: string | null;
+
+  completedAt?: string | null;
+  completedById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+
+  employee?: {
+    id: string;
+    employeeId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    joiningDate: string;
+    employeeStatus: string;
+    department?: { id: string; name: string };
+    designation?: { id: string; title: string };
+    branch?: { id: string; name: string; city?: string };
+  };
+  brand?: {
+    id: string;
+    name: string;
+    code: string;
+    companyName?: string;
+    address?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  };
+}
+
+export interface ExitMetrics {
+  totalRequests: number;
+  pendingApprovals: number;
+  servingNotice: number;
+  pendingAssetClearance: number;
+  exitsCompleted: number;
+}
+
+export interface ExitDashboardData {
+  metrics: ExitMetrics;
+  requests: ExitRequest[];
+}
+
+export interface RelievingLetterPreview {
+  referenceNumber: string;
+  issueDate: string;
+  companyName: string;
+  brandName: string;
+  brandAddress?: string | null;
+  brandPhone?: string | null;
+  brandEmail?: string | null;
+  employeeName: string;
+  employeeId: string;
+  department: string;
+  designation: string;
+  branch: string;
+  joiningDate: string;
+  lastWorkingDay: string;
+  hrRemarks?: string | null;
+  relievingLetterIssued: boolean;
+  relievingLetterDocId?: string | null;
+  relievingLetterIssuedAt?: string | null;
+}
+
+// In-App Notification Types
+export type NotificationType =
+  | 'LEAVE'
+  | 'ATTENDANCE'
+  | 'SALARY'
+  | 'EMPLOYEE'
+  | 'EXIT'
+  | 'SYSTEM'
+  | 'INFO';
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  module?: string | null;
+  recordId?: string | null;
+  actionUrl?: string | null;
+  isRead: boolean;
+  readAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  unreadCount: number;
 }
 

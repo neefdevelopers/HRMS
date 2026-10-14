@@ -21,13 +21,13 @@ async function runTests() {
 
   try {
     // Fetch Apex brand and employee Arjun Mehta
-    const brand = await prisma.brand.findUnique({ where: { code: 'APEX' } });
+    const brand = await prisma.brand.findFirst({ where: { code: 'APEX' } });
     if (!brand) throw new Error('Brand APEX not found');
 
-    const arjun = await prisma.employee.findUnique({ where: { employeeId: 'APEX-1002' } });
+    const arjun = await prisma.employee.findFirst({ where: { employeeId: 'APEX-1002' } });
     if (!arjun) throw new Error('Employee APEX-1002 not found');
 
-    const ananya = await prisma.employee.findUnique({ where: { employeeId: 'APEX-1004' } });
+    const ananya = await prisma.employee.findFirst({ where: { employeeId: 'APEX-1004' } });
     if (!ananya) throw new Error('Employee APEX-1004 not found');
 
     // TEST 1: Fixed salary configuration retrieval
@@ -79,7 +79,7 @@ async function runTests() {
     await prisma.incentive.delete({ where: { id: pendingInc.id } });
 
     // TEST 4: Percentage-based incentive calculation
-    const rohan = await prisma.employee.findUnique({ where: { employeeId: 'APEX-1003' } });
+    const rohan = await prisma.employee.findFirst({ where: { employeeId: 'APEX-1003' } });
     if (rohan) {
       const calcRohan = await salaryCalculator.calculateSalary({
         employeeId: rohan.id,

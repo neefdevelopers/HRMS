@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../utils/response.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { Role } from '../middleware/rbac.js';
 import { PunchSyncService } from '../adapters/punchingAdapter.js';
+import { notificationService } from '../services/notificationService.js';
 
 const punchSyncService = new PunchSyncService();
 
@@ -20,6 +21,7 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string;
     const employeeId = req.query.employeeId as string;
+    const effectiveCompanyId = req.effectiveCompanyId;
 
     const where: any = {};
 
@@ -30,10 +32,20 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
       where.date = date;
     }
 
+    // Company isolation
+    if (effectiveCompanyId) {
+      where.brand = { companyId: effectiveCompanyId };
+    }
+
     // Brand filtering & role-based scoping
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (req.user?.role !== Role.SUPER_ADMIN && req.user?.role !== Role.GROUP_HR) {
+    } else if (
+      req.user?.role !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.COMPANY_ADMIN &&
+      req.user?.role !== Role.COMPANY_HR &&
+      req.user?.role !== Role.GROUP_HR
+    ) {
       if (req.user?.brandId) {
         where.brandId = req.user.brandId;
       }
@@ -49,7 +61,7 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
     if (departmentId) {
-      where.employee = { departmentId };
+      where.employee = { ...(where.employee || {}), departmentId };
     }
 
     const total = await prisma.attendance.count({ where });
@@ -102,6 +114,7 @@ export const syncPunches = async (req: AuthenticatedRequest, res: Response) => {
         entityType: 'PunchSyncLog',
         entityId: result.syncLogId,
         brandId: req.user?.brandId,
+        companyId: req.effectiveCompanyId || null,
         changesJson: JSON.stringify(result)
       }
     });
@@ -124,6 +137,11 @@ export const manualCorrection = async (req: AuthenticatedRequest, res: Response)
 
     if (!existing) {
       return sendError(res, 'Attendance record not found', 404);
+    }
+
+    // Tenant isolation validation
+    if (req.effectiveCompanyId && existing.employee.companyId && existing.employee.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Record belongs to another company.', 403);
     }
 
     let workingHours = existing.workingHours;
@@ -153,9 +171,29 @@ export const manualCorrection = async (req: AuthenticatedRequest, res: Response)
         entityType: 'Attendance',
         entityId: id,
         brandId: existing.brandId,
+        companyId: existing.employee.companyId,
         changesJson: JSON.stringify({ old: existing, updated })
       }
     });
+
+    // Notify employee of attendance correction
+    try {
+      const empUserId = await notificationService.getUserIdByEmployeeId(existing.employeeId);
+      if (empUserId && empUserId !== req.user?.id) {
+        await notificationService.createNotification({
+          userId: empUserId,
+          title: 'Attendance Adjusted',
+          message: `Your attendance record for ${existing.date} was adjusted (${updated.status}, ${updated.workingHours}h).`,
+          type: 'ATTENDANCE',
+          module: 'attendance',
+          recordId: id,
+          actionUrl: '/attendance',
+          eventKey: `att-adjust-${id}-${Date.now()}`
+        });
+      }
+    } catch (notifErr: any) {
+      console.error('[AttendanceController] Notification error on manualCorrection:', notifErr.message);
+    }
 
     return sendSuccess(res, updated, 'Attendance record corrected successfully');
   } catch (error: any) {
@@ -169,8 +207,14 @@ export const getPunches = async (req: AuthenticatedRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 30;
     const employeeId = req.query.employeeId as string;
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
+    const effectiveCompanyId = req.effectiveCompanyId;
 
     const where: any = {};
+
+    if (effectiveCompanyId) {
+      where.employee = { companyId: effectiveCompanyId };
+    }
+
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
     }

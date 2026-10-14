@@ -16,6 +16,9 @@ import salaryRoutes from './routes/salaryRoutes.js';
 import shiftRoutes from './routes/shiftRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import settingRoutes from './routes/settingRoutes.js';
+import exitRoutes from './routes/exitRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import companyRoutes from './routes/companyRoutes.js';
 
 const app = express();
 
@@ -34,6 +37,7 @@ app.get('/api/health', (req, res) => {
 
 // Mount Module Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/companies', companyRoutes);
 app.use('/api/brands', brandRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -45,6 +49,8 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/assets-documents', assetRoutes);
 app.use('/api', assetRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/exit', exitRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error Handling
 app.use(errorHandler);
