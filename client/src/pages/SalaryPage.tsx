@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { api } from '../services/api';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
@@ -82,6 +83,7 @@ interface SalaryOverviewItem {
 export const SalaryPage: React.FC = () => {
   const { user } = useAuth();
   const { selectedBrandId } = useBrand();
+  const { activeCompanyId } = useCompany();
 
   const canManageSalary = user?.role === 'ADMIN' || user?.role === 'HR';
 
@@ -148,7 +150,16 @@ export const SalaryPage: React.FC = () => {
 
   useEffect(() => {
     loadSalaryData();
-  }, [selectedBrandId, selectedPeriod, search]);
+    const handleRefresh = () => {
+      loadSalaryData();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId, selectedPeriod, search]);
 
   // Month navigation helpers
   const handlePrevMonth = () => {

@@ -314,7 +314,9 @@ export const CompaniesPage: React.FC = () => {
             <div>
               <p className="text-xs font-medium text-slate-500">Active Context</p>
               <p className="text-xs font-bold text-brand-700 mt-1 truncate max-w-[150px]">
-                {companies.find((c) => c.id === activeCompanyId)?.name || 'Default Context'}
+                {activeCompanyId === 'all'
+                  ? 'All Companies'
+                  : (companies.find((c) => c.id === activeCompanyId)?.name || 'All Companies')}
               </p>
             </div>
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">

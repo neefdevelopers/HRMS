@@ -17,6 +17,7 @@ const API_BASE = '/api';
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('hrms_token');
   const activeCompanyId = localStorage.getItem('hrms_active_company_id');
+  const selectedBrandId = localStorage.getItem('hrms_selected_brand');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>)
@@ -25,8 +26,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  if (activeCompanyId) {
+  if (activeCompanyId && !headers['X-Company-Id']) {
     headers['X-Company-Id'] = activeCompanyId;
+  }
+  if (selectedBrandId && !headers['X-Brand-Id']) {
+    headers['X-Brand-Id'] = selectedBrandId;
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -47,6 +51,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 async function requestWithMeta<T, M = any>(endpoint: string, options: RequestInit = {}): Promise<{ data: T; meta?: M }> {
   const token = localStorage.getItem('hrms_token');
   const activeCompanyId = localStorage.getItem('hrms_active_company_id');
+  const selectedBrandId = localStorage.getItem('hrms_selected_brand');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>)
@@ -55,8 +60,11 @@ async function requestWithMeta<T, M = any>(endpoint: string, options: RequestIni
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  if (activeCompanyId) {
+  if (activeCompanyId && !headers['X-Company-Id']) {
     headers['X-Company-Id'] = activeCompanyId;
+  }
+  if (selectedBrandId && !headers['X-Brand-Id']) {
+    headers['X-Brand-Id'] = selectedBrandId;
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -140,17 +148,23 @@ export const api = {
   },
 
   // Employees
-  getEmployees: (params: { page?: number; limit?: number; search?: string; brandId?: string; branchId?: string; departmentId?: string; status?: string }) => {
+  getEmployees: (params: { page?: number; limit?: number; search?: string; brandId?: string; branchId?: string; departmentId?: string; status?: string; companyId?: string }) => {
     const sp = new URLSearchParams();
     if (params.page) sp.append('page', params.page.toString());
     if (params.limit) sp.append('limit', params.limit.toString());
     if (params.search) sp.append('search', params.search);
-    if (params.brandId) sp.append('brandId', params.brandId);
+    if (params.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
     if (params.branchId) sp.append('branchId', params.branchId);
     if (params.departmentId) sp.append('departmentId', params.departmentId);
     if (params.status) sp.append('status', params.status);
+    if (params.companyId && params.companyId !== 'all') sp.append('companyId', params.companyId);
 
-    return request<Employee[]>(`/employees?${sp.toString()}`);
+    const headers: Record<string, string> = {};
+    if (params.companyId) {
+      headers['X-Company-Id'] = params.companyId;
+    }
+
+    return request<Employee[]>(`/employees?${sp.toString()}`, { headers });
   },
 
   getEmployeeById: (id: string) => request<Employee>(`/employees/${id}`),

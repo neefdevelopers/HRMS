@@ -15,6 +15,7 @@ import {
   EmployeeDocument
 } from '../types';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import {
   Search,
@@ -48,6 +49,7 @@ export const EmployeesPage: React.FC = () => {
   const { id: routeEmployeeId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
+  const { activeCompanyId, activeCompany } = useCompany();
   const { selectedBrandId } = useBrand();
   const { canManageEmployees, user } = useAuth();
   const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
@@ -138,7 +140,9 @@ export const EmployeesPage: React.FC = () => {
     try {
       setLoading(true);
       const effectiveBrand = brandFilter || (selectedBrandId !== 'all' ? selectedBrandId : undefined);
+      const targetCompany = activeCompanyId !== 'all' ? (activeCompanyId || activeCompany?.id || undefined) : undefined;
       const data = await api.getEmployees({
+        companyId: targetCompany,
         brandId: effectiveBrand,
         departmentId: departmentFilter || undefined,
         search,
@@ -156,8 +160,9 @@ export const EmployeesPage: React.FC = () => {
   // Load dropdown options
   const loadFormOptions = async () => {
     try {
+      const targetCompany = activeCompanyId !== 'all' ? (activeCompanyId || activeCompany?.id || undefined) : undefined;
       const [brs, branchesData, depts, desigs, shfts] = await Promise.all([
-        api.getBrands(),
+        api.getBrands(targetCompany ? { companyId: targetCompany } : undefined),
         api.getBranches(),
         api.getDepartments(),
         api.getDesignations(),
@@ -169,7 +174,7 @@ export const EmployeesPage: React.FC = () => {
       setDesignations(desigs);
       setShifts(shfts);
 
-      if (brs.length > 0 && !newEmployeeForm.brandId) {
+      if (brs.length > 0) {
         setNewEmployeeForm(prev => ({
           ...prev,
           brandId: brs[0].id,
@@ -200,10 +205,21 @@ export const EmployeesPage: React.FC = () => {
 
   useEffect(() => {
     loadEmployees();
-  }, [selectedBrandId, brandFilter, departmentFilter, statusFilter, search]);
+  }, [activeCompanyId, selectedBrandId, brandFilter, departmentFilter, statusFilter, search]);
 
   useEffect(() => {
+    setBrandFilter('');
+    setDepartmentFilter('');
     loadFormOptions();
+  }, [activeCompanyId]);
+
+  useEffect(() => {
+    const handleCompanyChange = () => {
+      loadEmployees();
+      loadFormOptions();
+    };
+    window.addEventListener('hrms:company-changed', handleCompanyChange);
+    return () => window.removeEventListener('hrms:company-changed', handleCompanyChange);
   }, []);
 
   useEffect(() => {
@@ -1616,7 +1632,13 @@ export const EmployeesPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Employee Directory</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Employee Directory</h1>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <Briefcase className="w-3 h-3 text-indigo-600" />
+              {activeCompany?.name || (activeCompanyId === 'all' ? 'All Companies' : 'All Companies')}
+            </span>
+          </div>
         </div>
 
         {isHrOrAdmin && (
@@ -1713,6 +1735,7 @@ export const EmployeesPage: React.FC = () => {
               <tr>
                 <th className="py-3 px-4">Employee ID</th>
                 <th className="py-3 px-4">Employee Name</th>
+                {(!activeCompanyId || activeCompanyId === 'all') && <th className="py-3 px-4">Company</th>}
                 <th className="py-3 px-4">Brand</th>
                 <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4">Designation</th>
@@ -1724,13 +1747,13 @@ export const EmployeesPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={(!activeCompanyId || activeCompanyId === 'all') ? 9 : 8} className="py-8 text-center text-slate-400">
                     Loading employee directory...
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={(!activeCompanyId || activeCompanyId === 'all') ? 9 : 8} className="py-8 text-center text-slate-400">
                     No employee records match the search criteria.
                   </td>
                 </tr>
@@ -1758,6 +1781,14 @@ export const EmployeesPage: React.FC = () => {
                         <Mail className="w-3 h-3" /> {emp.email}
                       </div>
                     </td>
+
+                    {(!activeCompanyId || activeCompanyId === 'all') && (
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {emp.company?.name || (emp.brand as any)?.company?.name || 'Company'}
+                        </span>
+                      </td>
+                    )}
 
                     <td className="py-3 px-4">
                       <span className="font-semibold text-slate-800">{emp.brand?.name}</span>

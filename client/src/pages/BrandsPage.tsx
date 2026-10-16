@@ -182,12 +182,10 @@ export const BrandsPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Brand & Organization Management</h1>
-            {activeCompany && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">
-                <Briefcase className="w-3 h-3 text-brand-600" />
-                {activeCompany.name}
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">
+              <Briefcase className="w-3 h-3 text-brand-600" />
+              {activeCompany?.name || 'All Companies'}
+            </span>
           </div>
         </div>
 

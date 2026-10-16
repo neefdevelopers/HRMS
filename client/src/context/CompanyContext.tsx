@@ -49,15 +49,22 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const storedId = localStorage.getItem('hrms_active_company_id');
       let target: Company | undefined;
 
-      if (storedId && list.some((c) => c.id === storedId)) {
+      if (storedId === 'all') {
+        setActiveCompany(null);
+        setActiveCompanyIdState('all');
+        localStorage.setItem('hrms_active_company_id', 'all');
+      } else if (storedId && list.some((c) => c.id === storedId)) {
         target = list.find((c) => c.id === storedId);
+        setActiveCompany(target!);
+        setActiveCompanyIdState(target!.id);
+        localStorage.setItem('hrms_active_company_id', target!.id);
       } else if (user?.companyId && list.some((c) => c.id === user.companyId)) {
         target = list.find((c) => c.id === user.companyId);
+        setActiveCompany(target!);
+        setActiveCompanyIdState(target!.id);
+        localStorage.setItem('hrms_active_company_id', target!.id);
       } else if (list.length > 0) {
         target = list[0];
-      }
-
-      if (target) {
         setActiveCompany(target);
         setActiveCompanyIdState(target.id);
         localStorage.setItem('hrms_active_company_id', target.id);
@@ -78,6 +85,17 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [fetchCompanies]);
 
   const setActiveCompanyId = (id: string) => {
+    if (id === 'all') {
+      setActiveCompany(null);
+      setActiveCompanyIdState('all');
+      localStorage.setItem('hrms_active_company_id', 'all');
+      // Reset selected brand to all when switching company
+      localStorage.setItem('hrms_selected_brand', 'all');
+      // Trigger event so dependent views refresh without stale cache
+      window.dispatchEvent(new CustomEvent('hrms:company-changed', { detail: { companyId: 'all' } }));
+      return;
+    }
+
     const found = companies.find((c) => c.id === id);
     if (found) {
       setActiveCompany(found);
@@ -90,7 +108,7 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const canSwitchCompany = isAdmin || companies.length > 1;
+  const canSwitchCompany = isAdmin || companies.length >= 1;
 
   return (
     <CompanyContext.Provider

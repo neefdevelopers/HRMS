@@ -7,6 +7,7 @@ import { Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Edit3, CalendarCh
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../common/Modal';
 import { useAuth } from '../../context/AuthContext';
+import { useCompany } from '../../context/CompanyContext';
 
 interface AttendanceTableProps {
   selectedDate: string;
@@ -20,6 +21,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
   onRefreshParent
 }) => {
   const navigate = useNavigate();
+  const { activeCompanyId } = useCompany();
   const { canManageAttendance, canManageEmployees } = useAuth();
 
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -56,7 +58,16 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
 
   useEffect(() => {
     fetchAttendanceData();
-  }, [selectedDate, selectedBrandId, statusFilter, page]);
+    const handleRefresh = () => {
+      fetchAttendanceData();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedDate, selectedBrandId, statusFilter, page]);
 
   const statusBadgeVariant = (status: AttendanceStatus): BadgeVariant => {
     switch (status) {

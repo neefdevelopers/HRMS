@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Card } from '../components/common/Card';
 import { useBrand } from '../context/BrandContext';
-import { Download, FileText, Calendar, Filter } from 'lucide-react';
+import { useCompany } from '../context/CompanyContext';
+import { Download, FileText, Calendar, Filter, Building2, Building } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
-  const { selectedBrandId } = useBrand();
+  const { selectedBrandId, selectedBrand } = useBrand();
+  const { activeCompanyId, activeCompany } = useCompany();
 
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
@@ -12,19 +14,38 @@ export const ReportsPage: React.FC = () => {
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [downloading, setDownloading] = useState(false);
 
-  const handleDownloadCSV = () => {
-    const token = localStorage.getItem('hrms_token');
-    const brandParam = selectedBrandId !== 'all' ? `&brandId=${selectedBrandId}` : '';
-    const url = `/api/reports/attendance?startDate=${startDate}&endDate=${endDate}${brandParam}&format=csv`;
+  const handleDownloadCSV = async () => {
+    try {
+      setDownloading(true);
+      const token = localStorage.getItem('hrms_token');
+      const brandParam = selectedBrandId !== 'all' ? `&brandId=${selectedBrandId}` : '';
+      const companyParam = (activeCompanyId && activeCompanyId !== 'all') ? `&companyId=${activeCompanyId}` : '';
+      const url = `/api/reports/attendance?startDate=${startDate}&endDate=${endDate}${brandParam}${companyParam}&format=csv`;
 
-    // Download via link
-    const a = document.createElement('a');
-    a.href = url;
-    a.setAttribute('download', `attendance_report_${startDate}_to_${endDate}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (activeCompanyId && activeCompanyId !== 'all') headers['X-Company-Id'] = activeCompanyId;
+      if (selectedBrandId && selectedBrandId !== 'all') headers['X-Brand-Id'] = selectedBrandId;
+
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error('Failed to download report');
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.setAttribute('download', `attendance_report_${startDate}_to_${endDate}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err: any) {
+      alert(err.message || 'Report download failed');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -32,6 +53,19 @@ export const ReportsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Reports & Compliance</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Export company and brand-specific audit spreadsheets
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            {activeCompany?.name || 'All Companies'}
+          </span>
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+            <Building className="w-3.5 h-3.5" />
+            {selectedBrand?.name || 'All Brands'}
+          </span>
         </div>
       </div>
 

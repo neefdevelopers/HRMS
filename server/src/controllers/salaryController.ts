@@ -38,30 +38,43 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
     const period = (req.query.period as string) || new Date().toISOString().slice(0, 7);
     const search = (req.query.search as string) || '';
 
-    const whereBrand: any = {};
+    const andClauses: any[] = [{ employeeStatus: 'ACTIVE' }];
+
     if (req.effectiveCompanyId) {
-      whereBrand.companyId = req.effectiveCompanyId;
+      andClauses.push({
+        OR: [
+          { companyId: req.effectiveCompanyId },
+          { brand: { companyId: req.effectiveCompanyId } }
+        ]
+      });
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      andClauses.push({
+        OR: [
+          { companyId: { in: userCompanyIds } },
+          { brand: { companyId: { in: userCompanyIds } } }
+        ]
+      });
     }
+
     if (brandId && brandId !== 'all') {
-      whereBrand.brandId = brandId;
+      andClauses.push({ brandId });
     } else if (req.user?.role === Role.HR && req.user?.brandId) {
-      whereBrand.brandId = req.user.brandId;
+      andClauses.push({ brandId: req.user.brandId });
+    }
+
+    if (search) {
+      andClauses.push({
+        OR: [
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { employeeId: { contains: search } }
+        ]
+      });
     }
 
     const { startDate, endDate } = getMonthBounds(period);
-
-    const empWhere: any = {
-      ...whereBrand,
-      employeeStatus: 'ACTIVE'
-    };
-
-    if (search) {
-      empWhere.OR = [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-        { employeeId: { contains: search } }
-      ];
-    }
+    const empWhere: any = andClauses.length > 0 ? { AND: andClauses } : {};
 
     const employees = await prisma.employee.findMany({
       where: empWhere,
@@ -77,7 +90,7 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
     const payrollPeriods = await prisma.payrollPeriod.findMany({
       where: {
         period,
-        ...(whereBrand.brandId ? { brandId: whereBrand.brandId } : {})
+        ...(brandId && brandId !== 'all' ? { brandId } : (req.user?.role === Role.HR && req.user?.brandId ? { brandId: req.user.brandId } : {}))
       }
     });
     const periodIds = payrollPeriods.map((p) => p.id);
@@ -522,6 +535,9 @@ export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response)
     const where: any = {};
     if (req.effectiveCompanyId) {
       where.brand = { companyId: req.effectiveCompanyId };
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      where.brand = { companyId: { in: userCompanyIds } };
     }
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;

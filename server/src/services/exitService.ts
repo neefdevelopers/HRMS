@@ -58,42 +58,57 @@ export class ExitService {
    * 1. Exit Management Dashboard: Metrics & Requests List
    */
   async getDashboard(filters: ExitFilters, user: any) {
-    const where: any = {};
+    const andClauses: any[] = [];
 
     // Multi-company and brand permission boundary
     if (user.companyId) {
-      where.companyId = user.companyId;
+      andClauses.push({
+        OR: [
+          { companyId: user.companyId },
+          { brand: { companyId: user.companyId } }
+        ]
+      });
     }
     if (filters.brandId && filters.brandId !== 'all') {
-      where.brandId = filters.brandId;
+      andClauses.push({ brandId: filters.brandId });
     } else if (user.role === Role.HR && user.brandId) {
-      where.brandId = user.brandId;
+      andClauses.push({ brandId: user.brandId });
     }
 
     if (filters.status && filters.status !== 'ALL') {
-      where.status = filters.status;
+      andClauses.push({ status: filters.status });
     }
 
     if (filters.search && filters.search.trim()) {
       const term = filters.search.trim();
-      where.OR = [
-        { employee: { firstName: { contains: term } } },
-        { employee: { lastName: { contains: term } } },
-        { employee: { employeeId: { contains: term } } },
-        { employee: { email: { contains: term } } }
-      ];
+      andClauses.push({
+        OR: [
+          { employee: { firstName: { contains: term } } },
+          { employee: { lastName: { contains: term } } },
+          { employee: { employeeId: { contains: term } } },
+          { employee: { email: { contains: term } } }
+        ]
+      });
     }
 
+    const where: any = andClauses.length > 0 ? { AND: andClauses } : {};
+
     // Compute metrics using aggregate counts scoped to the user's company and brand permission
-    const metricsWhere: any = {};
+    const metricsClauses: any[] = [];
     if (user.companyId) {
-      metricsWhere.companyId = user.companyId;
+      metricsClauses.push({
+        OR: [
+          { companyId: user.companyId },
+          { brand: { companyId: user.companyId } }
+        ]
+      });
     }
     if (filters.brandId && filters.brandId !== 'all') {
-      metricsWhere.brandId = filters.brandId;
+      metricsClauses.push({ brandId: filters.brandId });
     } else if (user.role === Role.HR && user.brandId) {
-      metricsWhere.brandId = user.brandId;
+      metricsClauses.push({ brandId: user.brandId });
     }
+    const metricsWhere: any = metricsClauses.length > 0 ? { AND: metricsClauses } : {};
 
     const [totalRequests, pendingApprovals, servingNotice, pendingAssetClearance, exitsCompleted] =
       await Promise.all([

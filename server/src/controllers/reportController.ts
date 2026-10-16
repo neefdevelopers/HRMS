@@ -18,6 +18,9 @@ export const getAttendanceReport = async (req: AuthenticatedRequest, res: Respon
 
     if (effectiveCompanyId) {
       where.brand = { companyId: effectiveCompanyId };
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      where.brand = { companyId: { in: userCompanyIds } };
     }
 
     if (brandId && brandId !== 'all') {

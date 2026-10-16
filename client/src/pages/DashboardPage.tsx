@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { DashboardMetrics, Department } from '../types';
@@ -28,6 +29,7 @@ import { KPISkeleton } from '../components/common/Skeleton';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { activeCompanyId } = useCompany();
   const { selectedBrandId, setSelectedBrandId } = useBrand();
   const { user, canManageAttendance } = useAuth();
 
@@ -67,11 +69,11 @@ export const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     loadDepartments();
-  }, [selectedBrandId]);
+  }, [activeCompanyId, selectedBrandId]);
 
   useEffect(() => {
     loadDashboard();
-  }, [date, selectedBrandId, departmentId]);
+  }, [activeCompanyId, date, selectedBrandId, departmentId]);
 
   const handleSyncPunches = async () => {
     try {

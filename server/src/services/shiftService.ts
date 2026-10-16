@@ -103,8 +103,11 @@ export class ShiftService {
   /**
    * 1. SHIFTS CRUD
    */
-  async getShifts(brandId?: string) {
+  async getShifts(brandId?: string, companyId?: string) {
     const where: any = {};
+    if (companyId) {
+      where.brand = { companyId };
+    }
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
     }
@@ -304,8 +307,9 @@ export class ShiftService {
     };
   }
 
-  async getAssignments(brandId?: string, employeeId?: string) {
+  async getAssignments(brandId?: string, employeeId?: string, companyId?: string) {
     const where: any = {};
+    if (companyId) where.brand = { companyId };
     if (brandId && brandId !== 'all') where.brandId = brandId;
     if (employeeId) where.employeeId = employeeId;
 
@@ -486,28 +490,40 @@ export class ShiftService {
   /**
    * 4. SHIFT CALENDAR & MONTHLY ROSTER
    */
-  async getShiftCalendar(params: { brandId?: string; period: string; search?: string }) {
-    const { brandId, period, search } = params;
+  async getShiftCalendar(params: { brandId?: string; companyId?: string; period: string; search?: string }) {
+    const { brandId, companyId, period, search } = params;
     const [yearStr, monthStr] = period.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr, 10);
     const daysInMonth = new Date(year, month, 0).getDate();
 
     const whereBrand: any = {};
+    if (companyId) whereBrand.brand = { companyId };
     if (brandId && brandId !== 'all') whereBrand.brandId = brandId;
 
     // Fetch employees
-    const whereEmp: any = {
-      ...whereBrand,
-      employeeStatus: 'ACTIVE'
-    };
-    if (search) {
-      whereEmp.OR = [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-        { employeeId: { contains: search } }
-      ];
+    const andClauses: any[] = [{ employeeStatus: 'ACTIVE' }];
+    if (companyId) {
+      andClauses.push({
+        OR: [
+          { companyId },
+          { brand: { companyId } }
+        ]
+      });
     }
+    if (brandId && brandId !== 'all') {
+      andClauses.push({ brandId });
+    }
+    if (search) {
+      andClauses.push({
+        OR: [
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { employeeId: { contains: search } }
+        ]
+      });
+    }
+    const whereEmp: any = andClauses.length > 0 ? { AND: andClauses } : {};
 
     const employees = await prisma.employee.findMany({
       where: whereEmp,
@@ -590,23 +606,35 @@ export class ShiftService {
    * Connects assigned shifts with punching & attendance data,
    * accurately calculating late arrivals, overnight shifts, incomplete hours, and overtime.
    */
-  async getShiftWiseAttendance(params: { brandId?: string; date: string; search?: string }) {
-    const { brandId, date: dateStr, search } = params;
+  async getShiftWiseAttendance(params: { brandId?: string; companyId?: string; date: string; search?: string }) {
+    const { brandId, companyId, date: dateStr, search } = params;
 
     const whereBrand: any = {};
+    if (companyId) whereBrand.brand = { companyId };
     if (brandId && brandId !== 'all') whereBrand.brandId = brandId;
 
-    const whereEmp: any = {
-      ...whereBrand,
-      employeeStatus: 'ACTIVE'
-    };
-    if (search) {
-      whereEmp.OR = [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-        { employeeId: { contains: search } }
-      ];
+    const andClauses: any[] = [{ employeeStatus: 'ACTIVE' }];
+    if (companyId) {
+      andClauses.push({
+        OR: [
+          { companyId },
+          { brand: { companyId } }
+        ]
+      });
     }
+    if (brandId && brandId !== 'all') {
+      andClauses.push({ brandId });
+    }
+    if (search) {
+      andClauses.push({
+        OR: [
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { employeeId: { contains: search } }
+        ]
+      });
+    }
+    const whereEmp: any = andClauses.length > 0 ? { AND: andClauses } : {};
 
     const employees = await prisma.employee.findMany({
       where: whereEmp,

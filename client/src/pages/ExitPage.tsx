@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { api } from '../services/api';
 import {
   ExitRequest,
@@ -40,6 +41,7 @@ import {
 export const ExitPage: React.FC = () => {
   const { user } = useAuth();
   const { selectedBrandId } = useBrand();
+  const { activeCompanyId } = useCompany();
 
   const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
 
@@ -142,11 +144,21 @@ export const ExitPage: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
-  }, [selectedBrandId, statusFilter]);
+    const handleRefresh = () => {
+      loadDashboardData();
+      loadEmployees();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId, statusFilter]);
 
   useEffect(() => {
     loadEmployees();
-  }, [selectedBrandId, isHrOrAdmin]);
+  }, [activeCompanyId, selectedBrandId, isHrOrAdmin]);
 
   // Load assets when tab switches to 'assets'
   const loadExitAssets = async (exitId: string) => {

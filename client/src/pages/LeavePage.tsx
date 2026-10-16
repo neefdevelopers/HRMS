@@ -4,10 +4,12 @@ import { Modal } from '../components/common/Modal';
 import { api } from '../services/api';
 import { LeaveRequest, LeaveType, Employee } from '../types';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Trash2, Calendar, RefreshCw, CalendarDays, Users, CheckCircle2 } from 'lucide-react';
 
 export const LeavePage: React.FC = () => {
+  const { activeCompanyId } = useCompany();
   const { selectedBrandId } = useBrand();
   const { user } = useAuth();
 
@@ -55,7 +57,16 @@ export const LeavePage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [selectedBrandId]);
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId]);
 
   const handleAddLeave = async (e: React.FormEvent) => {
     e.preventDefault();

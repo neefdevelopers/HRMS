@@ -149,6 +149,10 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
         };
         // Set company-specific membership role!
         effectiveRole = (matchedMem.role as 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER') || user.role as any;
+      } else if (headerCompanyId === 'all') {
+        effectiveCompanyId = null;
+        activeCompany = null;
+        effectiveRole = (user.role as 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER') || 'HR';
       } else {
         // Auto-select if user has active memberships
         if (activeMemberships.length > 0) {
@@ -170,13 +174,22 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       }
     }
 
+    // Resolve brand context: check header 'x-brand-id' or query 'brandId'
+    const headerBrandId = (req.headers['x-brand-id'] as string) || (req.query.brandId as string);
+    let effectiveBrandId: string | null = null;
+    if (headerBrandId && headerBrandId !== 'all') {
+      effectiveBrandId = headerBrandId;
+    } else if (effectiveRole === 'HR' && user.brandId) {
+      effectiveBrandId = user.brandId;
+    }
+
     req.user = {
       id: user.id,
       email: user.email,
       platformRole: user.role,
       role: effectiveRole,
       companyId: effectiveCompanyId,
-      brandId: user.brandId,
+      brandId: effectiveBrandId || user.brandId,
       branchId: user.branchId,
       employeeId: user.employeeId,
       firstName: user.firstName,
@@ -186,6 +199,7 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       activeCompany
     };
     req.effectiveCompanyId = effectiveCompanyId;
+    req.effectiveBrandId = effectiveBrandId;
 
     next();
   } catch (error: any) {

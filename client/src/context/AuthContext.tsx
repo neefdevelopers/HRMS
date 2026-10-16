@@ -98,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAttendanceViewer = user?.role === 'ATTENDANCE_VIEWER';
   const isSuperAdmin = isAdmin;
   const isCompanyAdmin = isAdmin;
-  const canAccessAllBrands = isAdmin || (isHr && !user?.brandId);
+  const canAccessAllBrands = isAdmin || (isHr && !user?.brandId) || (isAttendanceViewer && !user?.brandId);
   const canManageEmployees = isAdmin || isHr;
   const canManageAttendance = isAdmin || isHr;
   const canManageCompanies = isAdmin;

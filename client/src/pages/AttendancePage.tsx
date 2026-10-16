@@ -4,12 +4,14 @@ import { Badge, BadgeVariant } from '../components/common/Badge';
 import { api } from '../services/api';
 import { Attendance, AttendanceStatus } from '../types';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { Cpu, RotateCw, Calendar as CalendarIcon, Clock, Search, Filter, CalendarCheck } from 'lucide-react';
 import { AttendanceTable } from '../components/dashboard/AttendanceTable';
 import { DailyLeavesSummary } from '../components/dashboard/DailyLeavesSummary';
 
 export const AttendancePage: React.FC = () => {
+  const { activeCompanyId } = useCompany();
   const { selectedBrandId } = useBrand();
   const { canManageAttendance } = useAuth();
 
@@ -40,7 +42,17 @@ export const AttendancePage: React.FC = () => {
 
   useEffect(() => {
     loadLeaveCounts();
-  }, [date, selectedBrandId]);
+    const handleRefresh = () => {
+      loadLeaveCounts();
+      if (activeTab === 'rawPunches') loadRawPunches();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, date, selectedBrandId]);
 
   const loadRawPunches = async () => {
     try {
@@ -60,7 +72,7 @@ export const AttendancePage: React.FC = () => {
     if (activeTab === 'rawPunches') {
       loadRawPunches();
     }
-  }, [activeTab, selectedBrandId]);
+  }, [activeTab, activeCompanyId, selectedBrandId]);
 
   const handleSync = async () => {
     try {

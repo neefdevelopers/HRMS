@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../common/Card';
 import { Badge, BadgeVariant } from '../common/Badge';
 import { api } from '../../services/api';
+import { useCompany } from '../../context/CompanyContext';
 import { DailyLeavesData, DailyLeaveRecord } from '../../types';
 import {
   CalendarCheck,
@@ -27,6 +28,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
   selectedDate,
   selectedBrandId
 }) => {
+  const { activeCompanyId } = useCompany();
   const [data, setData] = useState<DailyLeavesData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
@@ -50,7 +52,16 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
 
   useEffect(() => {
     fetchLeaves();
-  }, [selectedDate, selectedBrandId, statusFilter]);
+    const handleRefresh = () => {
+      fetchLeaves();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedDate, selectedBrandId, statusFilter]);
 
   const summary = data?.summary || {
     totalApproved: 0,

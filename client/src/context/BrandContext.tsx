@@ -31,12 +31,12 @@ export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const data = await api.getBrands();
       setBrands(data);
 
-      // If user cannot access all brands, lock selection to their brand
-      if (!canAccessAllBrands && user.brandId) {
+      // If user has a locked single brand, lock selection to their brand
+      if (!canAccessAllBrands && user.brandId && brands.length <= 1) {
         setSelectedBrandIdState(user.brandId);
         localStorage.setItem('hrms_selected_brand', user.brandId);
       } else if (selectedBrandId !== 'all' && !data.find(b => b.id === selectedBrandId)) {
-        // If stored brandId no longer exists in current company
+        // If stored brandId no longer exists in current context
         setSelectedBrandIdState('all');
         localStorage.setItem('hrms_selected_brand', 'all');
       }
@@ -54,9 +54,10 @@ export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [user, activeCompanyId]);
 
   const setSelectedBrandId = (id: string) => {
-    if (!canAccessAllBrands && id === 'all') return;
+    if (!canAccessAllBrands && brands.length <= 1 && id === 'all') return;
     setSelectedBrandIdState(id);
     localStorage.setItem('hrms_selected_brand', id);
+    window.dispatchEvent(new CustomEvent('hrms:brand-changed', { detail: { brandId: id } }));
   };
 
   const selectedBrand = brands.find((b) => b.id === selectedBrandId) || null;

@@ -247,8 +247,14 @@ export interface ShiftAttendanceData {
 
 export interface Employee {
   id: string;
+  companyId?: string | null;
   employeeId: string;
   brandId: string;
+  company?: {
+    id: string;
+    name: string;
+    code?: string;
+  } | null;
   branchId: string;
   departmentId: string;
   designationId: string;

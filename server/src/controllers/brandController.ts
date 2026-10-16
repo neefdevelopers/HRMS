@@ -20,6 +20,9 @@ export const getBrands = async (req: AuthenticatedRequest, res: Response) => {
     const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.companyId = companyFilter;
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      whereClause.companyId = { in: userCompanyIds };
     }
 
     // Role-based brand filtering

@@ -17,35 +17,54 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string;
     const effectiveCompanyId = req.effectiveCompanyId;
+    const queryCompanyId = req.query.companyId as string | undefined;
+    const resolvedCompanyId = (queryCompanyId && queryCompanyId !== 'all') ? queryCompanyId : effectiveCompanyId;
 
-    const where: any = {};
+    const andClauses: any[] = [];
 
-    // Company isolation
-    if (effectiveCompanyId) {
-      where.companyId = effectiveCompanyId;
+    // Company isolation (matches both direct companyId and brand.companyId)
+    if (resolvedCompanyId) {
+      andClauses.push({
+        OR: [
+          { companyId: resolvedCompanyId },
+          { brand: { companyId: resolvedCompanyId } }
+        ]
+      });
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      andClauses.push({
+        OR: [
+          { companyId: { in: userCompanyIds } },
+          { brand: { companyId: { in: userCompanyIds } } }
+        ]
+      });
     }
 
     // Brand filtering & isolation
     if (brandId && brandId !== 'all') {
-      where.brandId = brandId;
+      andClauses.push({ brandId });
     } else if (req.user?.role === Role.HR && req.user?.brandId) {
-      where.brandId = req.user.brandId;
+      andClauses.push({ brandId: req.user.brandId });
     }
 
-    if (branchId) where.branchId = branchId;
-    if (departmentId) where.departmentId = departmentId;
-    if (status) where.employeeStatus = status;
+    if (branchId) andClauses.push({ branchId });
+    if (departmentId) andClauses.push({ departmentId });
+    if (status) andClauses.push({ employeeStatus: status });
 
     if (search) {
-      where.OR = [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-        { email: { contains: search } },
-        { employeeId: { contains: search } },
-        { phone: { contains: search } },
-        { biometricId: { contains: search } }
-      ];
+      andClauses.push({
+        OR: [
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { email: { contains: search } },
+          { employeeId: { contains: search } },
+          { phone: { contains: search } },
+          { biometricId: { contains: search } }
+        ]
+      });
     }
+
+    const where: any = andClauses.length > 0 ? { AND: andClauses } : {};
 
     const total = await prisma.employee.count({ where });
     const employees = await prisma.employee.findMany({
@@ -53,7 +72,16 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        brand: { select: { id: true, name: true, code: true } },
+        company: { select: { id: true, name: true, code: true } },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
         branch: { select: { id: true, name: true, city: true } },
         department: { select: { id: true, name: true } },
         designation: { select: { id: true, title: true } },

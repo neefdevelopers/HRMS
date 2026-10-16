@@ -64,7 +64,7 @@ function getNotificationIcon(type: NotificationType | string) {
 
 export const Navbar: React.FC = () => {
   const { user, logout, canAccessAllBrands, isAttendanceViewer, isAdmin } = useAuth();
-  const { companies, activeCompany, setActiveCompanyId, canSwitchCompany } = useCompany();
+  const { companies, activeCompany, activeCompanyId, setActiveCompanyId, canSwitchCompany } = useCompany();
   const { brands, selectedBrandId, setSelectedBrandId } = useBrand();
   const navigate = useNavigate();
 
@@ -185,10 +185,13 @@ export const Navbar: React.FC = () => {
             <span className="text-xs font-semibold text-amber-700">No Company Assigned</span>
           ) : canSwitchCompany ? (
             <select
-              value={activeCompany?.id || ''}
+              value={activeCompanyId || (activeCompany?.id ?? 'all')}
               onChange={(e) => setActiveCompanyId(e.target.value)}
               className="bg-transparent text-xs font-bold text-indigo-950 border-none focus:outline-none focus:ring-0 cursor-pointer pr-3 max-w-[170px] truncate"
             >
+              <option value="all" className="text-slate-900 bg-white font-semibold">
+                All Companies
+              </option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id} className="text-slate-900 bg-white">
                   {c.name} ({c.code})
@@ -197,7 +200,7 @@ export const Navbar: React.FC = () => {
             </select>
           ) : (
             <span className="text-xs font-bold text-indigo-950 truncate max-w-[170px]">
-              {activeCompany?.name || 'Company'}
+              {activeCompany?.name || 'All Companies'}
             </span>
           )}
         </div>
@@ -206,15 +209,17 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
           <Building className="w-4 h-4 text-slate-500 shrink-0" />
           <span className="text-xs font-medium text-slate-500 hidden sm:inline">Active Brand:</span>
-          {canAccessAllBrands ? (
+          {canAccessAllBrands || brands.length > 1 ? (
             <select
               value={selectedBrandId}
               onChange={(e) => setSelectedBrandId(e.target.value)}
               className="bg-transparent text-xs font-semibold text-slate-900 border-none focus:outline-none focus:ring-0 cursor-pointer pr-4 max-w-[170px] truncate"
             >
-              <option value="all">All Brands (Consolidated Group)</option>
+              <option value="all" className="text-slate-900 bg-white font-semibold">
+                All Brands
+              </option>
               {brands.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={b.id} className="text-slate-900 bg-white">
                   {b.name} ({b.code})
                 </option>
               ))}

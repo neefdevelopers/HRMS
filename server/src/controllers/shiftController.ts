@@ -11,7 +11,8 @@ export class ShiftController {
   async getShifts(req: AuthenticatedRequest, res: Response) {
     try {
       const brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
-      const shifts = await shiftService.getShifts(brandId);
+      const companyId = (req.query.companyId as string) || req.effectiveCompanyId || undefined;
+      const shifts = await shiftService.getShifts(brandId, companyId);
       return sendSuccess(res, shifts, 'Shifts retrieved successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to retrieve shifts', 500);
@@ -139,9 +140,10 @@ export class ShiftController {
   async getAssignments(req: AuthenticatedRequest, res: Response) {
     try {
       let brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
+      let companyId = (req.query.companyId as string) || req.effectiveCompanyId || undefined;
       let employeeId = (req.query.employeeId as string) || undefined;
 
-      const assignments = await shiftService.getAssignments(brandId, employeeId);
+      const assignments = await shiftService.getAssignments(brandId, employeeId, companyId);
       return sendSuccess(res, assignments, 'Assignments retrieved successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to retrieve assignments', 500);
@@ -169,10 +171,11 @@ export class ShiftController {
   async getShiftCalendar(req: AuthenticatedRequest, res: Response) {
     try {
       const brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
+      const companyId = (req.query.companyId as string) || req.effectiveCompanyId || undefined;
       const period = (req.query.period as string) || new Date().toISOString().slice(0, 7); // YYYY-MM
       const search = (req.query.search as string) || undefined;
 
-      const calendar = await shiftService.getShiftCalendar({ brandId, period, search });
+      const calendar = await shiftService.getShiftCalendar({ brandId, companyId, period, search });
 
       return sendSuccess(res, calendar, 'Shift calendar generated successfully');
     } catch (error: any) {
@@ -187,10 +190,11 @@ export class ShiftController {
   async getShiftWiseAttendance(req: AuthenticatedRequest, res: Response) {
     try {
       const brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
+      const companyId = (req.query.companyId as string) || req.effectiveCompanyId || undefined;
       const date = (req.query.date as string) || new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const search = (req.query.search as string) || undefined;
 
-      const attendanceData = await shiftService.getShiftWiseAttendance({ brandId, date, search });
+      const attendanceData = await shiftService.getShiftWiseAttendance({ brandId, companyId, date, search });
 
       return sendSuccess(res, attendanceData, 'Shift attendance records retrieved successfully');
     } catch (error: any) {

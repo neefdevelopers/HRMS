@@ -15,8 +15,8 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     const departmentId = req.query.departmentId as string;
     const effectiveCompanyId = req.effectiveCompanyId;
 
-    // Admin without specific company selected or with scope=platform: return platform overview
-    if (req.user?.role === Role.ADMIN && (!effectiveCompanyId || req.query.scope === 'platform')) {
+    // Admin with explicit scope=platform: return platform overview
+    if (req.user?.role === Role.ADMIN && req.query.scope === 'platform') {
       const totalCompanies = await prisma.company.count();
       const activeCompanies = await prisma.company.count({ where: { isActive: true } });
       const totalBrands = await prisma.brand.count();
@@ -47,22 +47,31 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     }
 
     // 1. Build Base Filter for Company / Brand / Branch / Department
-    const employeeBaseFilter: any = {
-      employeeStatus: 'ACTIVE'
-    };
+    const andClauses: any[] = [{ employeeStatus: 'ACTIVE' }];
 
     if (effectiveCompanyId) {
-      employeeBaseFilter.companyId = effectiveCompanyId;
+      andClauses.push({
+        OR: [
+          { companyId: effectiveCompanyId },
+          { brand: { companyId: effectiveCompanyId } }
+        ]
+      });
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      andClauses.push({
+        OR: [
+          { companyId: { in: userCompanyIds } },
+          { brand: { companyId: { in: userCompanyIds } } }
+        ]
+      });
     }
 
-    if (brandId && brandId !== 'all') {
-      employeeBaseFilter.brandId = brandId;
-    } else if (req.user?.role === Role.HR && req.user?.brandId) {
-      employeeBaseFilter.brandId = req.user.brandId;
-    }
+    const resolvedBrandId = (brandId && brandId !== 'all') ? brandId : (req.user?.role === Role.HR && req.user?.brandId ? req.user.brandId : undefined);
+    if (resolvedBrandId) andClauses.push({ brandId: resolvedBrandId });
+    if (branchId) andClauses.push({ branchId });
+    if (departmentId) andClauses.push({ departmentId });
 
-    if (branchId) employeeBaseFilter.branchId = branchId;
-    if (departmentId) employeeBaseFilter.departmentId = departmentId;
+    const employeeBaseFilter: any = { AND: andClauses };
 
     // 2. Total Active Employees
     const totalEmployees = await prisma.employee.count({
@@ -73,9 +82,12 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     const brandQuery: any = {};
     if (effectiveCompanyId) {
       brandQuery.companyId = effectiveCompanyId;
+    } else if (req.user?.role !== Role.ADMIN) {
+      const userCompanyIds = (req.user?.memberships || []).filter(m => m.isActive && m.isCompanyActive).map(m => m.companyId);
+      brandQuery.companyId = { in: userCompanyIds };
     }
-    if (employeeBaseFilter.brandId) {
-      brandQuery.id = employeeBaseFilter.brandId;
+    if (resolvedBrandId) {
+      brandQuery.id = resolvedBrandId;
     }
 
     const allBrands = await prisma.brand.findMany({
@@ -110,8 +122,8 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       employee: employeeBaseFilter
     };
 
-    if (employeeBaseFilter.brandId) {
-      attendanceFilter.brandId = employeeBaseFilter.brandId;
+    if (resolvedBrandId) {
+      attendanceFilter.brandId = resolvedBrandId;
     }
 
     const dailyAttendances = await prisma.attendance.findMany({

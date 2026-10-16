@@ -5,6 +5,7 @@ import { Modal } from '../components/common/Modal';
 import { api } from '../services/api';
 import { Asset, CompanyDocument, DocumentExpirySummary, Employee, AssetAssignmentHistory, AssetStatus } from '../types';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import {
   Laptop,
@@ -61,6 +62,7 @@ export interface AssetsDocumentsPageProps {
 
 export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode = 'all' }) => {
   const { selectedBrandId } = useBrand();
+  const { activeCompanyId } = useCompany();
   const { user } = useAuth();
   const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
 
@@ -171,7 +173,19 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   // Initial Data Fetch
   useEffect(() => {
     loadEmployees();
-  }, [selectedBrandId]);
+    const handleRefresh = () => {
+      loadEmployees();
+      if (activeTab === 'assets') loadAssets();
+      else if (activeTab === 'documents') loadDocuments();
+      else if (activeTab === 'reminders') loadExpirySummary();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId]);
 
   useEffect(() => {
     if (activeTab === 'assets') {
@@ -181,7 +195,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
     } else if (activeTab === 'reminders') {
       loadExpirySummary();
     }
-  }, [activeTab, selectedBrandId, assetTypeFilter, assetStatusFilter, docTypeFilter, docEmployeeFilter]);
+  }, [activeCompanyId, activeTab, selectedBrandId, assetTypeFilter, assetStatusFilter, docTypeFilter, docEmployeeFilter]);
 
   const loadEmployees = async () => {
     try {

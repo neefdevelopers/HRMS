@@ -16,6 +16,8 @@ import {
   Shift
 } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useCompany } from '../context/CompanyContext';
+import { useBrand } from '../context/BrandContext';
 import {
   Building2,
   Tag,
@@ -49,6 +51,8 @@ import {
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
+  const { activeCompanyId } = useCompany();
+  const { selectedBrandId } = useBrand();
   const isSuperAdminOrGroupHr = user?.role === 'ADMIN' || user?.role === 'HR';
 
   // Active section tab:
@@ -193,7 +197,16 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     loadAllSettings();
-  }, []);
+    const handleRefresh = () => {
+      loadAllSettings();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId]);
 
   const loadAllSettings = async () => {
     setLoading(true);

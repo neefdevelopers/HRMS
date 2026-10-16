@@ -5,6 +5,7 @@ import { Modal } from '../components/common/Modal';
 import { api } from '../services/api';
 import { Shift, ShiftAssignment, ShiftCalendarData, ShiftAttendanceData, Employee } from '../types';
 import { useBrand } from '../context/BrandContext';
+import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import {
   Clock,
@@ -29,6 +30,7 @@ import {
 
 export const ShiftPage: React.FC = () => {
   const { selectedBrandId } = useBrand();
+  const { activeCompanyId } = useCompany();
   const { user } = useAuth();
   const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
 
@@ -156,7 +158,16 @@ export const ShiftPage: React.FC = () => {
 
   useEffect(() => {
     loadShiftsAndAssignments();
-  }, [selectedBrandId]);
+    const handleRefresh = () => {
+      loadShiftsAndAssignments();
+    };
+    window.addEventListener('hrms:company-changed', handleRefresh);
+    window.addEventListener('hrms:brand-changed', handleRefresh);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleRefresh);
+      window.removeEventListener('hrms:brand-changed', handleRefresh);
+    };
+  }, [activeCompanyId, selectedBrandId]);
 
   useEffect(() => {
     if (activeTab === 'calendar_attendance') {
@@ -166,7 +177,7 @@ export const ShiftPage: React.FC = () => {
         loadAttendance();
       }
     }
-  }, [activeTab, calSubView, calendarPeriod, attendanceDate, selectedBrandId]);
+  }, [activeCompanyId, activeTab, calSubView, calendarPeriod, attendanceDate, selectedBrandId]);
 
   // Flash message helper
   const showSuccess = (msg: string) => {
