@@ -58,41 +58,16 @@ export class ExitService {
    * 1. Exit Management Dashboard: Metrics & Requests List
    */
   async getDashboard(filters: ExitFilters, user: any) {
-    const isEmployee = user.role === Role.EMPLOYEE;
-    const userEmployeeId = user.employeeId;
-
     const where: any = {};
 
-    // Permission and brand boundary
-    if (isEmployee) {
-      if (!userEmployeeId) {
-        return {
-          metrics: {
-            totalRequests: 0,
-            pendingApprovals: 0,
-            servingNotice: 0,
-            pendingAssetClearance: 0,
-            exitsCompleted: 0
-          },
-          requests: []
-        };
-      }
-      where.employeeId = userEmployeeId;
-    } else {
-      if (user.companyId) {
-        where.companyId = user.companyId;
-      }
-      if (filters.brandId && filters.brandId !== 'all') {
-        where.brandId = filters.brandId;
-      } else if (
-        user.role !== Role.SUPER_ADMIN &&
-        user.role !== Role.COMPANY_ADMIN &&
-        user.role !== Role.COMPANY_HR &&
-        user.role !== Role.GROUP_HR &&
-        user.brandId
-      ) {
-        where.brandId = user.brandId;
-      }
+    // Multi-company and brand permission boundary
+    if (user.companyId) {
+      where.companyId = user.companyId;
+    }
+    if (filters.brandId && filters.brandId !== 'all') {
+      where.brandId = filters.brandId;
+    } else if (user.role === Role.HR && user.brandId) {
+      where.brandId = user.brandId;
     }
 
     if (filters.status && filters.status !== 'ALL') {
@@ -109,13 +84,14 @@ export class ExitService {
       ];
     }
 
-    // Compute metrics using aggregate counts scoped to the user's brand permission
+    // Compute metrics using aggregate counts scoped to the user's company and brand permission
     const metricsWhere: any = {};
-    if (isEmployee) {
-      metricsWhere.employeeId = userEmployeeId;
-    } else if (filters.brandId && filters.brandId !== 'all') {
+    if (user.companyId) {
+      metricsWhere.companyId = user.companyId;
+    }
+    if (filters.brandId && filters.brandId !== 'all') {
       metricsWhere.brandId = filters.brandId;
-    } else if (user.role !== Role.SUPER_ADMIN && user.role !== Role.GROUP_HR && user.brandId) {
+    } else if (user.role === Role.HR && user.brandId) {
       metricsWhere.brandId = user.brandId;
     }
 
@@ -212,14 +188,7 @@ export class ExitService {
     },
     user: any
   ) {
-    let targetEmployeeId = data.employeeId;
-
-    if (user.role === Role.EMPLOYEE) {
-      if (!user.employeeId) {
-        throw new Error('Employee profile not linked to user account.');
-      }
-      targetEmployeeId = user.employeeId;
-    }
+    const targetEmployeeId = data.employeeId;
 
     if (!targetEmployeeId) {
       throw new Error('Employee ID is required.');
@@ -235,12 +204,7 @@ export class ExitService {
     }
 
     // Check brand access if non-admin/HR
-    if (
-      user.role !== Role.SUPER_ADMIN &&
-      user.role !== Role.GROUP_HR &&
-      user.brandId &&
-      user.brandId !== employee.brandId
-    ) {
+    if (user.role === Role.HR && user.brandId && user.brandId !== employee.brandId) {
       throw new Error('Access denied to submit resignation for this employee.');
     }
 
@@ -317,9 +281,6 @@ export class ExitService {
     data: { hrRemarks?: string; confirmedLastWorkingDay?: string },
     user: any
   ) {
-    if (user.role === Role.EMPLOYEE) {
-      throw new Error('Unauthorized. Only HR or Administrators can approve resignations.');
-    }
 
     const exitRequest = await prisma.exitRequest.findUnique({
       where: { id },
@@ -379,10 +340,6 @@ export class ExitService {
    * 4. Reject Resignation
    */
   async rejectResignation(id: string, remarks: string, user: any) {
-    if (user.role === Role.EMPLOYEE) {
-      throw new Error('Unauthorized. Only HR or Administrators can reject resignations.');
-    }
-
     if (!remarks || !remarks.trim()) {
       throw new Error('Rejection remarks are required.');
     }
@@ -436,10 +393,6 @@ export class ExitService {
     data: { lastWorkingDay: string; hrRemarks?: string },
     user: any
   ) {
-    if (user.role === Role.EMPLOYEE) {
-      throw new Error('Unauthorized. Only HR or Administrators can update the last working day.');
-    }
-
     if (!data.lastWorkingDay) {
       throw new Error('Last working day is required.');
     }
@@ -507,10 +460,6 @@ export class ExitService {
       throw new Error('Exit request not found.');
     }
 
-    if (user.role === Role.EMPLOYEE && exitRequest.employeeId !== user.employeeId) {
-      throw new Error('Unauthorized. You can only withdraw your own resignation.');
-    }
-
     if (['REJECTED', 'WITHDRAWN', 'EXIT_COMPLETED'].includes(exitRequest.status)) {
       throw new Error(`Exit request cannot be withdrawn from status '${exitRequest.status}'.`);
     }
@@ -542,10 +491,6 @@ export class ExitService {
     },
     user: any
   ) {
-    if (user.role === Role.EMPLOYEE) {
-      throw new Error('Unauthorized. Only HR or Administrators can update exit checklists.');
-    }
-
     const exitRequest = await prisma.exitRequest.findUnique({ where: { id } });
     if (!exitRequest) {
       throw new Error('Exit request not found.');
@@ -907,10 +852,6 @@ export class ExitService {
    * 14. Complete Exit
    */
   async completeExit(exitRequestId: string, user: any) {
-    if (user.role === Role.EMPLOYEE) {
-      throw new Error('Unauthorized. Only HR or Administrators can complete an exit.');
-    }
-
     const exitRequest = await prisma.exitRequest.findUnique({
       where: { id: exitRequestId },
       include: { employee: true }

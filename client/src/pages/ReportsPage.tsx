@@ -32,9 +32,6 @@ export const ReportsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Reports & Compliance</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Generate and export consolidated workforce attendance and leave reports in CSV format.
-          </p>
         </div>
       </div>
 
@@ -42,7 +39,6 @@ export const ReportsPage: React.FC = () => {
         {/* Attendance Report Card */}
         <Card
           title="Attendance & Punctuality Report"
-          subtitle="Detailed employee check-in, check-out, working hours, and late penalties"
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -85,7 +81,6 @@ export const ReportsPage: React.FC = () => {
         {/* Sync & Audit Logs Card */}
         <Card
           title="Hardware Synchronization Logs"
-          subtitle="Audit trail of automated and manual biometric device poll events"
         >
           <div className="p-4 bg-slate-50 rounded-lg border border-slate-200/80 text-xs text-slate-600 space-y-2">
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">

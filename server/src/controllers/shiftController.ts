@@ -141,15 +141,6 @@ export class ShiftController {
       let brandId = (req.query.brandId as string) || req.effectiveBrandId || undefined;
       let employeeId = (req.query.employeeId as string) || undefined;
 
-      // If logged in as regular employee, restrict strictly to their own employee ID
-      if (req.user?.role === 'EMPLOYEE') {
-        if (req.user.employeeId) {
-          employeeId = req.user.employeeId;
-        } else {
-          return sendSuccess(res, [], 'No employee profile linked');
-        }
-      }
-
       const assignments = await shiftService.getAssignments(brandId, employeeId);
       return sendSuccess(res, assignments, 'Assignments retrieved successfully');
     } catch (error: any) {
@@ -183,12 +174,6 @@ export class ShiftController {
 
       const calendar = await shiftService.getShiftCalendar({ brandId, period, search });
 
-      // If regular employee, filter down to their own roster row
-      if (req.user?.role === 'EMPLOYEE' && req.user.employeeId) {
-        calendar.roster = calendar.roster.filter(r => r.employee.id === req.user!.employeeId);
-        calendar.totalEmployees = calendar.roster.length;
-      }
-
       return sendSuccess(res, calendar, 'Shift calendar generated successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to generate shift calendar', 500);
@@ -207,12 +192,6 @@ export class ShiftController {
 
       const attendanceData = await shiftService.getShiftWiseAttendance({ brandId, date, search });
 
-      // If regular employee, filter down to their own record
-      if (req.user?.role === 'EMPLOYEE' && req.user.employeeId) {
-        attendanceData.records = attendanceData.records.filter(r => r.employeeId === req.user!.employeeId);
-        attendanceData.totalEmployees = attendanceData.records.length;
-      }
-
       return sendSuccess(res, attendanceData, 'Shift attendance records retrieved successfully');
     } catch (error: any) {
       return sendError(res, error.message || 'Failed to retrieve shift attendance', 500);
@@ -221,43 +200,10 @@ export class ShiftController {
 
   /**
    * GET /api/shifts/my-shift
-   * Quick summary for logged-in employee of their current shift & weekly off
+   * Obsolete employee self-service endpoint (explicitly denied)
    */
   async getMyShift(req: AuthenticatedRequest, res: Response) {
-    try {
-      if (!req.user) return sendError(res, 'Unauthorized', 401);
-
-      if (!req.user.employeeId) {
-        return sendError(res, 'No employee record linked to user account', 404);
-      }
-
-      const { prisma } = await import('../config/prisma.js');
-      const emp = await prisma.employee.findUnique({
-        where: { id: req.user.employeeId },
-        include: { shift: true }
-      });
-
-      if (!emp) {
-        return sendError(res, 'Employee record not found for logged in user', 404);
-      }
-
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const resolved = await shiftService.resolveShiftForEmployeeDate(emp.id, todayStr, emp.shift);
-
-      return sendSuccess(res, {
-        employee: {
-          id: emp.id,
-          name: `${emp.firstName} ${emp.lastName}`,
-          code: emp.employeeId
-        },
-        todayDate: todayStr,
-        currentShift: resolved.shift,
-        isWeeklyOffToday: resolved.isWeeklyOff,
-        isRotational: resolved.isRotational
-      }, 'Employee shift details retrieved');
-    } catch (error: any) {
-      return sendError(res, error.message || 'Failed to get employee shift details', 500);
-    }
+    return sendError(res, 'Employee self-service endpoints have been deprecated and removed. All shift schedules are managed by authorized HR and Admin personnel.', 403);
   }
 }
 

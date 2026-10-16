@@ -19,6 +19,7 @@ import settingRoutes from './routes/settingRoutes.js';
 import exitRoutes from './routes/exitRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import companyRoutes from './routes/companyRoutes.js';
+import hrManagementRoutes from './routes/hrManagementRoutes.js';
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.get('/api/health', (req, res) => {
 // Mount Module Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/hr-management', hrManagementRoutes);
 app.use('/api/brands', brandRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/attendance', attendanceRoutes);

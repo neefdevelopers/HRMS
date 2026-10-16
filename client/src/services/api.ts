@@ -8,7 +8,8 @@ import {
   SystemSettingsData, CompanySettings, AttendanceRules, LeavePolicies, ShiftRules,
   PayrollSettings, PunchingDeviceSetting, ApiSettings, TestConnectionResult,
   ExitRequest, ExitDashboardData, RelievingLetterPreview,
-  NotificationItem, NotificationPagination, Company, CompanyMembership
+  NotificationItem, NotificationPagination, Company, CompanyMembership, HrUserSummary, Role,
+  DailyLeavesData, DailyLeaveRecord, DailyLeaveSummary
 } from '../types';
 
 const API_BASE = '/api';
@@ -193,6 +194,15 @@ export const api = {
     if (params.page) sp.append('page', params.page.toString());
 
     return request<Attendance[]>(`/attendance?${sp.toString()}`);
+  },
+
+  getDailyLeaves: (params: { date?: string; brandId?: string; branchId?: string; status?: string }) => {
+    const sp = new URLSearchParams();
+    if (params.date) sp.append('date', params.date);
+    if (params.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
+    if (params.branchId) sp.append('branchId', params.branchId);
+    if (params.status) sp.append('status', params.status);
+    return request<DailyLeavesData>(`/attendance/daily-leaves?${sp.toString()}`);
   },
 
   syncPunches: (syncType = 'MANUAL') =>
@@ -439,8 +449,6 @@ export const api = {
       body: JSON.stringify(data)
     }),
 
-  getMyReceipts: () => request<SalaryReceipt[]>('/salary/my-receipts'),
-
   // Shift Management Module
   getShiftsList: (brandId?: string) => {
     const url = brandId && brandId !== 'all' ? `/shifts?brandId=${brandId}` : '/shifts';
@@ -505,14 +513,6 @@ export const api = {
     if (params.search) sp.append('search', params.search);
     return request<ShiftAttendanceData>(`/shifts/attendance?${sp.toString()}`);
   },
-
-  getMyShift: () => request<{
-    employee: { id: string; name: string; code: string };
-    todayDate: string;
-    currentShift: Shift;
-    isWeeklyOffToday: boolean;
-    isRotational: boolean;
-  }>('/shifts/my-shift'),
 
   // Assets & Documents
   getAssets: (params: { brandId?: string; type?: string; status?: string; employeeId?: string; search?: string }) => {
@@ -818,23 +818,40 @@ export const api = {
     request<ExitRequest>(`/exit/${id}/complete`, { method: 'POST' }),
 
   // In-App Notifications
-  getNotifications: (params: { page?: number; limit?: number; isRead?: boolean; type?: string } = {}) => {
+  getNotifications: (params: { page?: number; limit?: number; isRead?: boolean; type?: string; companyId?: string; search?: string } = {}) => {
     const sp = new URLSearchParams();
     if (params.page) sp.append('page', params.page.toString());
     if (params.limit) sp.append('limit', params.limit.toString());
     if (params.isRead !== undefined) sp.append('isRead', params.isRead.toString());
     if (params.type && params.type !== 'ALL') sp.append('type', params.type);
+    if (params.companyId) sp.append('companyId', params.companyId);
+    if (params.search && params.search.trim()) sp.append('search', params.search.trim());
     return requestWithMeta<NotificationItem[], NotificationPagination>(`/notifications?${sp.toString()}`);
   },
 
-  getUnreadNotificationCount: () =>
-    request<{ unreadCount: number }>('/notifications/unread-count'),
+  getUnreadNotificationCount: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return request<{ unreadCount: number }>(`/notifications/unread-count${qs}`);
+  },
 
   markNotificationAsRead: (id: string) =>
     request<NotificationItem>(`/notifications/${id}/read`, { method: 'PATCH' }),
 
-  markAllNotificationsAsRead: () =>
-    request<{ updatedCount: number }>('/notifications/read-all', { method: 'PATCH' }),
+  markNotificationAsUnread: (id: string) =>
+    request<NotificationItem>(`/notifications/${id}/unread`, { method: 'PATCH' }),
+
+  deleteNotification: (id: string) =>
+    request<{ id: string }>(`/notifications/${id}`, { method: 'DELETE' }),
+
+  markAllNotificationsAsRead: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return request<{ updatedCount: number }>(`/notifications/read-all${qs}`, { method: 'PATCH' });
+  },
+
+  clearReadNotifications: (companyId?: string) => {
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return request<{ deletedCount: number }>(`/notifications/clear-read${qs}`, { method: 'DELETE' });
+  },
 
   // Company Management (Platform Super Admin)
   getCompanies: (params?: { search?: string; status?: string }) => {
@@ -901,5 +918,64 @@ export const api = {
     request<any>(`/companies/${id}/admins`, {
       method: 'POST',
       body: JSON.stringify(data)
+    }),
+
+  // HR Management & Company Assignments (Admin only)
+  getHrUsers: () => request<HrUserSummary[]>('/hr-management'),
+
+  createHrUser: (data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    phone?: string;
+    role?: Role;
+    companyIds?: string[];
+    assignments?: Array<{ companyId: string; role: Role }>;
+  }) =>
+    request<any>('/hr-management', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateHrUser: (
+    userId: string,
+    data: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      role?: Role;
+      isActive?: boolean;
+    }
+  ) =>
+    request<any>(`/hr-management/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  updateHrCompanyAssignments: (
+    userId: string,
+    payload: string[] | { companyIds?: string[]; assignments?: Array<{ companyId: string; role: Role }> }
+  ) => {
+    const body = Array.isArray(payload) ? { companyIds: payload } : payload;
+    return request<any>(`/hr-management/${userId}/companies`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+  },
+
+  getCompanyHrUsers: (companyId: string) =>
+    request<any[]>(`/companies/${companyId}/hr-users`),
+
+  assignCompanyHrUser: (companyId: string, userId: string, role?: Role) =>
+    request<any>(`/companies/${companyId}/hr-users`, {
+      method: 'POST',
+      body: JSON.stringify({ userId, role })
+    }),
+
+  removeCompanyHrUser: (companyId: string, userId: string) =>
+    request<any>(`/companies/${companyId}/hr-users/${userId}`, {
+      method: 'DELETE'
     })
 };

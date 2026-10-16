@@ -5,9 +5,9 @@ import { authorizeRoles, Role } from '../middleware/rbac.js';
 
 const router = Router();
 
-// Only Super Admin and Group HR administrators are authorized to manage System Settings
+// Super Admin, Company Admin, and HR administrators are authorized to manage System Settings
 router.use(authenticate);
-router.use(authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR));
+router.use(authorizeRoles(Role.ADMIN, Role.HR));
 
 // 1. Get all system settings
 router.get('/', systemSettingController.getAllSettings);

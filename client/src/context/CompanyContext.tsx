@@ -16,15 +16,13 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAdmin } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [activeCompanyId, setActiveCompanyIdState] = useState<string | null>(() => {
     return localStorage.getItem('hrms_active_company_id');
   });
   const [loading, setLoading] = useState<boolean>(true);
-
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   const fetchCompanies = useCallback(async () => {
     if (!isAuthenticated) {
@@ -38,7 +36,7 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoading(true);
       let list: Company[] = [];
 
-      if (isSuperAdmin) {
+      if (isAdmin) {
         list = await api.getCompanies();
       } else {
         const me = await api.getMe();
@@ -73,7 +71,7 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, isSuperAdmin, user?.companyId]);
+  }, [isAuthenticated, isAdmin, user?.companyId]);
 
   useEffect(() => {
     fetchCompanies();
@@ -87,12 +85,12 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       localStorage.setItem('hrms_active_company_id', id);
       // Reset selected brand to all when switching company
       localStorage.setItem('hrms_selected_brand', 'all');
-      // Trigger a soft reload or window event so dependent components refresh
+      // Trigger event so dependent views refresh without stale cache
       window.dispatchEvent(new CustomEvent('hrms:company-changed', { detail: { companyId: id } }));
     }
   };
 
-  const canSwitchCompany = isSuperAdmin || companies.length > 1;
+  const canSwitchCompany = isAdmin || companies.length > 1;
 
   return (
     <CompanyContext.Provider

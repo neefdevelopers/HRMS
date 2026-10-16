@@ -4,20 +4,19 @@ import { sendError } from '../utils/response.js';
 import { prisma } from '../config/prisma.js';
 
 export const Role = {
-  PLATFORM_SUPER_ADMIN: 'SUPER_ADMIN',
-  SUPER_ADMIN: 'SUPER_ADMIN',
-  COMPANY_ADMIN: 'COMPANY_ADMIN',
-  COMPANY_HR: 'COMPANY_HR',
-  GROUP_HR: 'GROUP_HR', // backwards compatibility alias for COMPANY_HR
-  BRAND_HR: 'BRAND_HR',
-  MANAGER: 'MANAGER',
-  EMPLOYEE: 'EMPLOYEE'
+  ADMIN: 'ADMIN',
+  HR: 'HR',
+  ATTENDANCE_VIEWER: 'ATTENDANCE_VIEWER'
 } as const;
+
+export type ApplicationRole = (typeof Role)[keyof typeof Role];
 
 /**
  * Authorize role(s).
- * Platform Super Admin always passes.
- * GROUP_HR and COMPANY_HR are treated interchangeably for backward-compatibility.
+ * Exactly three application roles exist: ADMIN, HR, and ATTENDANCE_VIEWER.
+ * ADMIN has platform and company administration privileges.
+ * HR has operational permissions within assigned companies.
+ * ATTENDANCE_VIEWER has strictly read-only attendance permissions within assigned companies.
  */
 export const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -25,24 +24,10 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
       return sendError(res, 'Unauthorized', 401);
     }
 
-    // Platform Super Admin has universal access
-    if (req.user.platformRole === Role.SUPER_ADMIN) {
-      return next();
-    }
-
     const userRole = req.user.role;
-    
-    // Check if role directly matches
-    let isAllowed = allowedRoles.includes(userRole);
 
-    // If COMPANY_HR allowed, accept GROUP_HR as well, and vice-versa
-    if (!isAllowed) {
-      if (allowedRoles.includes('COMPANY_HR') && userRole === 'GROUP_HR') isAllowed = true;
-      if (allowedRoles.includes('GROUP_HR') && userRole === 'COMPANY_HR') isAllowed = true;
-      if (allowedRoles.includes('COMPANY_ADMIN') && (userRole === 'SUPER_ADMIN' || req.user.platformRole === 'SUPER_ADMIN')) isAllowed = true;
-    }
-
-    if (!isAllowed) {
+    // Check if role matches allowed roles
+    if (!allowedRoles.includes(userRole)) {
       return sendError(
         res,
         `Access denied. Role '${userRole}' is not authorized to perform this action.`,
@@ -56,18 +41,27 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
 
 /**
  * Middleware ensuring an active validated company context exists on the request.
+ * For HR and ATTENDANCE_VIEWER users: membership in active company is strictly required.
+ * For Admin users: can operate across authorized company workspaces, or without company on platform endpoints.
  */
 export const enforceCompanyAccess = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   if (!req.user) {
     return sendError(res, 'Unauthorized', 401);
   }
 
-  // Super admin can operate without specific company on platform endpoints
-  if (req.user.platformRole === Role.SUPER_ADMIN && !req.effectiveCompanyId) {
+  // Admin operating without specific company on platform-wide management endpoints
+  if (req.user.role === Role.ADMIN && !req.effectiveCompanyId) {
     return next();
   }
 
   if (!req.effectiveCompanyId) {
+    if (req.user.role === Role.HR || req.user.role === Role.ATTENDANCE_VIEWER) {
+      return sendError(
+        res,
+        'No active company assignments. Please contact an Administrator to assign you to a company.',
+        403
+      );
+    }
     return sendError(res, 'No active company context. Access denied.', 403);
   }
 
@@ -98,13 +92,8 @@ export const enforceBrandAccess = async (req: AuthenticatedRequest, res: Respons
     }
   }
 
-  // Platform Super Admin, Company Admin, and Company/Group HR have full brand access within the company
-  if (
-    req.user.platformRole === Role.SUPER_ADMIN ||
-    req.user.role === Role.COMPANY_ADMIN ||
-    req.user.role === Role.COMPANY_HR ||
-    req.user.role === Role.GROUP_HR
-  ) {
+  // Admin has full brand access within the company
+  if (req.user.role === Role.ADMIN) {
     if (requestedBrandId && requestedBrandId !== 'all') {
       req.effectiveBrandId = requestedBrandId;
     } else {
@@ -113,21 +102,24 @@ export const enforceBrandAccess = async (req: AuthenticatedRequest, res: Respons
     return next();
   }
 
-  // Brand HR, Manager, Employee are strictly scoped to their assigned brand
+  // HR users with specific brand assignment are scoped, otherwise can access all company brands
   const userBrandId = req.user.brandId;
-  if (!userBrandId) {
-    return sendError(res, 'User is not assigned to any brand.', 403);
+  if (userBrandId) {
+    if (requestedBrandId && requestedBrandId !== 'all' && requestedBrandId !== userBrandId) {
+      return sendError(
+        res,
+        'Access denied. You do not have permission to view or modify records for this brand.',
+        403
+      );
+    }
+    req.effectiveBrandId = userBrandId;
+  } else {
+    if (requestedBrandId && requestedBrandId !== 'all') {
+      req.effectiveBrandId = requestedBrandId;
+    } else {
+      req.effectiveBrandId = null;
+    }
   }
 
-  // If user requested another brand, reject immediately
-  if (requestedBrandId && requestedBrandId !== 'all' && requestedBrandId !== userBrandId) {
-    return sendError(
-      res,
-      'Access denied. You do not have permission to view or modify records for this brand.',
-      403
-    );
-  }
-
-  req.effectiveBrandId = userBrandId;
   next();
 };

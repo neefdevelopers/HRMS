@@ -1,4 +1,27 @@
-export type Role = 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_HR' | 'GROUP_HR' | 'BRAND_HR' | 'MANAGER' | 'EMPLOYEE';
+export type Role = 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER';
+
+export interface HrAssignment {
+  membershipId: string;
+  companyId: string;
+  companyName: string;
+  companyCode: string;
+  isCompanyActive: boolean;
+  role?: Role;
+  isActive: boolean;
+}
+
+export interface HrUserSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  isActive: boolean;
+  role: Role;
+  createdAt: string;
+  assignments: HrAssignment[];
+}
 
 export interface Company {
   id: string;
@@ -10,6 +33,7 @@ export interface Company {
   address?: string | null;
   registrationNumber?: string | null;
   taxNumber?: string | null;
+  role?: Role;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -38,10 +62,13 @@ export interface User {
   id: string;
   email: string;
   role: Role;
+  platformRole?: Role;
   firstName: string;
   lastName: string;
   phone?: string | null;
   companyId?: string | null;
+  activeCompany?: Company | null;
+  companies?: Company[];
   brandId?: string | null;
   branchId?: string | null;
   employeeId?: string | null;
@@ -393,6 +420,54 @@ export interface LeaveRequest {
     brand?: { name: string };
   };
   leaveType?: LeaveType;
+}
+
+export interface DailyLeaveRecord {
+  id: string;
+  startDate: string;
+  endDate: string;
+  isHalfDay: boolean;
+  halfDayType?: string | null;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  rejectionReason?: string | null;
+  appliedAt: string;
+  reviewedAt?: string | null;
+  employee?: {
+    id: string;
+    employeeId: string;
+    firstName: string;
+    lastName: string;
+    department?: { id: string; name: string } | null;
+    designation?: { id: string; title: string } | null;
+    branch?: { id: string; name: string } | null;
+  };
+  brand?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  leaveType?: {
+    id: string;
+    name: string;
+    code: string;
+    isPaid: boolean;
+  };
+}
+
+export interface DailyLeaveSummary {
+  totalApproved: number;
+  fullDayApproved: number;
+  halfDayApproved: number;
+  totalPending: number;
+  totalRejected: number;
+  totalRecords: number;
+}
+
+export interface DailyLeavesData {
+  date: string;
+  summary: DailyLeaveSummary;
+  leaves: DailyLeaveRecord[];
 }
 
 export interface DashboardMetrics {
@@ -1023,12 +1098,20 @@ export type NotificationType =
   | 'SALARY'
   | 'EMPLOYEE'
   | 'EXIT'
+  | 'HR_MANAGEMENT'
   | 'SYSTEM'
   | 'INFO';
 
 export interface NotificationItem {
   id: string;
   userId: string;
+  companyId?: string | null;
+  company?: {
+    id: string;
+    name: string;
+    code: string;
+    logo?: string | null;
+  } | null;
   title: string;
   message: string;
   type: NotificationType;

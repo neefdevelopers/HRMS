@@ -18,7 +18,10 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ExitPage } from './pages/ExitPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { CompaniesPage } from './pages/CompaniesPage';
+import { HrManagementPage } from './pages/HrManagementPage';
 import { LoginPage } from './pages/LoginPage';
+
+import { AccessDenied } from './components/common/AccessDenied';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -41,6 +44,26 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const RoleGuard: React.FC<{
+  allowedRoles: ('ADMIN' | 'HR' | 'ATTENDANCE_VIEWER')[];
+  children: React.ReactNode;
+}> = ({ allowedRoles, children }) => {
+  const { user } = useAuth();
+  if (!user) return null;
+  if (!allowedRoles.includes(user.role)) {
+    return <AccessDenied />;
+  }
+  return <>{children}</>;
+};
+
+const IndexRoute: React.FC = () => {
+  const { isAttendanceViewer } = useAuth();
+  if (isAttendanceViewer) {
+    return <Navigate to="/attendance" replace />;
+  }
+  return <DashboardPage />;
+};
+
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -57,22 +80,114 @@ export const App: React.FC = () => {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<DashboardPage />} />
-                <Route path="companies" element={<CompaniesPage />} />
-                <Route path="employees" element={<EmployeesPage />} />
-                <Route path="employees/:id" element={<EmployeesPage />} />
+                <Route index element={<IndexRoute />} />
+                <Route
+                  path="companies"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN']}>
+                      <CompaniesPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="hr-management"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN']}>
+                      <HrManagementPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="employees"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <EmployeesPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="employees/:id"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <EmployeesPage />
+                    </RoleGuard>
+                  }
+                />
                 <Route path="attendance" element={<AttendancePage />} />
-                <Route path="shifts" element={<ShiftPage />} />
-                <Route path="leave" element={<LeavePage />} />
-                <Route path="salary" element={<SalaryPage />} />
-                <Route path="assets" element={<AssetsPage />} />
+                <Route
+                  path="shifts"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <ShiftPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="leave"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <LeavePage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="salary"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <SalaryPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="assets"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <AssetsPage />
+                    </RoleGuard>
+                  }
+                />
                 <Route path="documents" element={<Navigate to="/assets" replace />} />
                 <Route path="assets-documents" element={<Navigate to="/assets" replace />} />
-                <Route path="exit" element={<ExitPage />} />
-                <Route path="notifications" element={<NotificationsPage />} />
-                <Route path="brands" element={<BrandsPage />} />
-                <Route path="reports" element={<ReportsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
+                <Route
+                  path="exit"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <ExitPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="notifications"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <NotificationsPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="brands"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <BrandsPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="reports"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <ReportsPage />
+                    </RoleGuard>
+                  }
+                />
+                <Route
+                  path="settings"
+                  element={
+                    <RoleGuard allowedRoles={['ADMIN', 'HR']}>
+                      <SettingsPage />
+                    </RoleGuard>
+                  }
+                />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -44,17 +44,8 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
     }
     if (brandId && brandId !== 'all') {
       whereBrand.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) whereBrand.brandId = req.user.brandId;
-    }
-
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId) {
-      whereBrand.id = req.user.employeeId;
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      whereBrand.brandId = req.user.brandId;
     }
 
     const { startDate, endDate } = getMonthBounds(period);
@@ -419,13 +410,8 @@ export const getSalaryDashboard = async (req: AuthenticatedRequest, res: Respons
     }
     if (brandId && brandId !== 'all') {
       whereBrand.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) whereBrand.brandId = req.user.brandId;
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      whereBrand.brandId = req.user.brandId;
     }
 
     // Total active employees
@@ -539,13 +525,8 @@ export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response)
     }
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) where.brandId = req.user.brandId;
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
     if (status) {
@@ -614,11 +595,6 @@ export const getEmployeeSalaryConfigHistory = async (req: AuthenticatedRequest, 
       return sendError(res, 'Employee not found', 404);
     }
 
-    // Role check
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== employeeId) {
-      return sendError(res, 'Access denied', 403);
-    }
-
     const history = await prisma.employeeSalaryConfig.findMany({
       where: { employeeId },
       orderBy: { effectiveFrom: 'desc' }
@@ -666,13 +642,7 @@ export const saveSalaryConfig = async (req: AuthenticatedRequest, res: Response)
     if (req.effectiveCompanyId && employee.companyId && employee.companyId !== req.effectiveCompanyId) {
       return sendError(res, 'Access denied. Employee belongs to another company.', 403);
     }
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== employee.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== employee.brandId) {
       return sendError(res, 'You do not have permission to configure salary for this employee brand.', 403);
     }
 
@@ -1038,13 +1008,7 @@ export const processMonthlySalary = async (req: AuthenticatedRequest, res: Respo
     }
 
     // Role authorization check
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== brandId) {
       return sendError(res, 'Access denied to process payroll for this brand.', 403);
     }
 
@@ -1231,13 +1195,8 @@ export const getPayrolls = async (req: AuthenticatedRequest, res: Response) => {
 
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) where.brandId = req.user.brandId;
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
     if (status) where.status = status;
@@ -1303,11 +1262,6 @@ export const getPayrollById = async (req: AuthenticatedRequest, res: Response) =
 
     if (!payroll) {
       return sendError(res, 'Payroll record not found', 404);
-    }
-
-    // Role check: Employee can only view their own
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== payroll.employeeId) {
-      return sendError(res, 'Access denied', 403);
     }
 
     return sendSuccess(res, payroll);
@@ -1557,15 +1511,8 @@ export const getReceipts = async (req: AuthenticatedRequest, res: Response) => {
 
     if (brandId && brandId !== 'all') {
       where.employeePayroll = { ...(where.employeePayroll || {}), brandId };
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        where.employeePayroll = { ...(where.employeePayroll || {}), brandId: req.user.brandId };
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.employeePayroll = { ...(where.employeePayroll || {}), brandId: req.user.brandId };
     }
 
     if (period) {
@@ -1633,11 +1580,6 @@ export const getReceiptById = async (req: AuthenticatedRequest, res: Response) =
 
     if (!receipt) return sendError(res, 'Salary receipt not found', 404);
 
-    // Role check: Employee can only view their own receipt
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== receipt.employeePayroll.employeeId) {
-      return sendError(res, 'Access denied', 403);
-    }
-
     return sendSuccess(res, receipt);
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to fetch receipt', 500);
@@ -1668,11 +1610,6 @@ export const downloadReceiptPdf = async (req: AuthenticatedRequest, res: Respons
     });
 
     if (!receipt) return sendError(res, 'Salary receipt not found', 404);
-
-    // Role check: Employee can only download their own receipt
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== receipt.employeePayroll.employeeId) {
-      return sendError(res, 'Access denied', 403);
-    }
 
     // Parse frozen snapshot if available, or build from records
     let pdfData: ReceiptPdfData;
@@ -1742,34 +1679,7 @@ export const downloadReceiptPdf = async (req: AuthenticatedRequest, res: Respons
  * 7. EMPLOYEE SELF-SERVICE RECEIPTS
  */
 export const getMyReceipts = async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const employeeId = req.user?.employeeId;
-    if (!employeeId) {
-      return sendError(res, 'User is not linked to an employee profile.', 400);
-    }
-
-    const receipts = await prisma.salaryReceipt.findMany({
-      where: {
-        employeePayroll: {
-          employeeId,
-          status: 'FINALIZED'
-        }
-      },
-      include: {
-        employeePayroll: {
-          include: {
-            brand: { select: { name: true, code: true } },
-            payrollPeriod: { select: { period: true } }
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    return sendSuccess(res, receipts);
-  } catch (error: any) {
-    return sendError(res, error.message || 'Failed to fetch personal salary receipts', 500);
-  }
+  return sendError(res, 'Employee self-service endpoints have been deprecated and removed. All salary receipts are accessible through authorized administrative and HR workflows.', 403);
 };
 
 /**
@@ -1787,10 +1697,6 @@ export const getOvertimeRecords = async (req: AuthenticatedRequest, res: Respons
     if (payrollMonth) where.payrollMonth = payrollMonth;
     if (employeeId) where.employeeId = employeeId;
     if (status) where.status = status;
-
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId) {
-      where.employeeId = req.user.employeeId;
-    }
 
     const records = await prisma.overtimeRecord.findMany({
       where,
@@ -1817,10 +1723,6 @@ export const getOvertimeRecords = async (req: AuthenticatedRequest, res: Respons
 export const createOvertimeRecord = async (req: AuthenticatedRequest, res: Response) => {
   try {
     let { employeeId, date, hours, minutes, totalMinutes, reason, customRate } = req.body;
-
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId) {
-      employeeId = req.user.employeeId;
-    }
 
     if (!employeeId || !date) {
       return sendError(res, 'employeeId and date (YYYY-MM-DD) are required.', 400);
@@ -1871,7 +1773,7 @@ export const createOvertimeRecord = async (req: AuthenticatedRequest, res: Respo
     }
 
     const otAmount = Number((parsedHours * otRate).toFixed(2));
-    const isHrOrAdmin = [Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.COMPANY_HR, Role.GROUP_HR, Role.BRAND_HR].includes(req.user?.role as any);
+    const isHrOrAdmin = req.user?.role === Role.ADMIN || req.user?.role === Role.HR;
 
     const otRecord = await prisma.overtimeRecord.create({
       data: {

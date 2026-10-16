@@ -89,7 +89,7 @@ export const DashboardPage: React.FC = () => {
   const handleResetFilters = () => {
     setDate(new Date().toISOString().split('T')[0]);
     setDepartmentId('');
-    if (user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR') {
+    if (user?.role === 'ADMIN' || !user?.brandId) {
       setSelectedBrandId('all');
     }
   };
@@ -100,9 +100,6 @@ export const DashboardPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Overview of your workforce and daily HR operations.
-          </p>
         </div>
 
         {/* Filter Toolbar */}

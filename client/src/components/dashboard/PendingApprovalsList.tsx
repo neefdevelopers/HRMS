@@ -33,7 +33,7 @@ export const PendingApprovalsList: React.FC<PendingApprovalsProps> = ({
   const { user } = useAuth();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const canApprove = ['SUPER_ADMIN', 'GROUP_HR', 'BRAND_HR', 'MANAGER'].includes(user?.role || '');
+  const canApprove = user?.role === 'ADMIN' || user?.role === 'HR';
 
   const handleReview = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
@@ -50,7 +50,6 @@ export const PendingApprovalsList: React.FC<PendingApprovalsProps> = ({
   return (
     <Card
       title="Pending Approvals"
-      subtitle="Leave requests & adjustments awaiting action"
       action={
         <button
           onClick={() => navigate('/leave')}

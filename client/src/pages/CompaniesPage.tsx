@@ -78,7 +78,7 @@ export const CompaniesPage: React.FC = () => {
     password: '',
     firstName: '',
     lastName: '',
-    role: 'COMPANY_ADMIN'
+    role: 'HR'
   });
 
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -208,7 +208,7 @@ export const CompaniesPage: React.FC = () => {
       password: '',
       firstName: '',
       lastName: '',
-      role: 'COMPANY_ADMIN'
+      role: 'HR'
     });
     setIsAdminModalOpen(true);
   };
@@ -257,9 +257,6 @@ export const CompaniesPage: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">Companies Management</h1>
             <Badge variant="info">Multi-Tenant Platform</Badge>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage independent customer companies, administrative accounts, and tenant isolation parameters.
-          </p>
         </div>
 
         <button
@@ -831,8 +828,8 @@ export const CompaniesPage: React.FC = () => {
                 onChange={(e) => setAdminForm({ ...adminForm, role: e.target.value })}
                 className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none"
               >
-                <option value="COMPANY_ADMIN">Company Administrator</option>
-                <option value="COMPANY_HR">Company HR Lead</option>
+                <option value="HR">HR Manager (HR)</option>
+                <option value="ADMIN">Company Administrator (ADMIN)</option>
               </select>
             </div>
           </div>

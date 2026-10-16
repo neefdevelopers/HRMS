@@ -46,7 +46,7 @@ model CompanyMembership {
   id        String   @id @default(uuid())
   userId    String
   companyId String
-  role      String   @default("EMPLOYEE") // COMPANY_ADMIN, COMPANY_HR, BRAND_HR, MANAGER, EMPLOYEE
+  role      String   @default("HR") // ADMIN, HR, ATTENDANCE_VIEWER
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -64,7 +64,7 @@ model User {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String
-  role         String    @default("EMPLOYEE") // SUPER_ADMIN (Platform Super Admin), COMPANY_ADMIN, COMPANY_HR, GROUP_HR, BRAND_HR, MANAGER, EMPLOYEE
+  role         String    @default("HR") // ADMIN, HR, ATTENDANCE_VIEWER
   firstName    String
   lastName     String
   phone        String?

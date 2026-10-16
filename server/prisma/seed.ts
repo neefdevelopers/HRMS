@@ -314,81 +314,50 @@ async function main() {
     }
   });
 
-  // 9. Users
-  // Super Admin
-  await prisma.user.create({
+  // 9. Users (Only 2 Roles: ADMIN and HR)
+  // Admin
+  const adminUser = await prisma.user.create({
     data: {
-      email: 'superadmin@hrms.local',
+      email: 'admin@hrms.local',
       passwordHash,
-      role: 'SUPER_ADMIN',
-      firstName: 'System',
-      lastName: 'SuperAdmin'
+      role: 'ADMIN',
+      firstName: 'Platform',
+      lastName: 'Admin'
     }
   });
 
-  // Group HR (multi-brand)
-  await prisma.user.create({
+  // HR (Company A only)
+  const hrApexUser = await prisma.user.create({
     data: {
-      email: 'grouphr@hrms.local',
+      email: 'hr.apex@hrms.local',
       passwordHash,
-      role: 'GROUP_HR',
-      firstName: 'Aakash',
-      lastName: 'Kapoor'
-    }
-  });
-
-  // Brand HR Apex
-  await prisma.user.create({
-    data: {
-      email: 'apex.hr@hrms.local',
-      passwordHash,
-      role: 'BRAND_HR',
-      firstName: 'Priya',
-      lastName: 'Sharma',
+      role: 'HR',
+      firstName: 'Apex',
+      lastName: 'HR',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
-      employeeId: empManagerApex.id
+      branchId: branchApexMum.id
     }
   });
 
-  // Brand HR Nexus
-  await prisma.user.create({
+  // Multi-Company HR (Assigned to multiple companies)
+  const hrMultiUser = await prisma.user.create({
     data: {
-      email: 'nexus.hr@hrms.local',
+      email: 'hr.multi@hrms.local',
       passwordHash,
-      role: 'BRAND_HR',
-      firstName: 'Rajesh',
-      lastName: 'Choudhary',
-      brandId: brandNexus.id,
-      branchId: branchNexusGgn.id
+      role: 'HR',
+      firstName: 'Morgan',
+      lastName: 'Multi-HR'
     }
   });
 
-  // Manager Apex
-  await prisma.user.create({
+  // Unassigned HR (0 company assignments)
+  const hrUnassignedUser = await prisma.user.create({
     data: {
-      email: 'manager.apex@hrms.local',
+      email: 'hr.unassigned@hrms.local',
       passwordHash,
-      role: 'MANAGER',
-      firstName: 'Rohan',
-      lastName: 'Verma',
-      brandId: brandApex.id,
-      branchId: branchApexMum.id,
-      employeeId: empSales1.id
-    }
-  });
-
-  // Employee
-  await prisma.user.create({
-    data: {
-      email: 'employee.apex@hrms.local',
-      passwordHash,
-      role: 'EMPLOYEE',
-      firstName: 'Arjun',
-      lastName: 'Mehta',
-      brandId: brandApex.id,
-      branchId: branchApexMum.id,
-      employeeId: empDev1.id
+      role: 'HR',
+      firstName: 'Alex',
+      lastName: 'Unassigned'
     }
   });
 
@@ -740,11 +709,11 @@ async function main() {
   });
 
   console.log('Seed completed successfully!');
-  console.log('Demo Credentials:');
-  console.log('- Super Admin: superadmin@hrms.local / password123');
-  console.log('- Group HR:    grouphr@hrms.local    / password123');
-  console.log('- Brand HR:    apex.hr@hrms.local    / password123');
-  console.log('- Employee:    employee.apex@hrms.local / password123');
+  console.log('Demo Credentials (2 Retained Roles: ADMIN and HR):');
+  console.log('- Admin:            admin@hrms.local         / password123');
+  console.log('- HR (Company A):   hr.apex@hrms.local       / password123');
+  console.log('- HR (Multi-Comp):  hr.multi@hrms.local      / password123');
+  console.log('- HR (Unassigned):  hr.unassigned@hrms.local / password123');
 }
 
 main()

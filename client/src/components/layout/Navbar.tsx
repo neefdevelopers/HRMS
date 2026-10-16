@@ -4,7 +4,6 @@ import {
   Building,
   Building2,
   LogOut,
-  Shield,
   Bell,
   CheckCheck,
   Check,
@@ -54,6 +53,8 @@ function getNotificationIcon(type: NotificationType | string) {
       return { icon: Users, color: 'text-purple-600 bg-purple-50 border-purple-200' };
     case 'EXIT':
       return { icon: ExitIcon, color: 'text-rose-600 bg-rose-50 border-rose-200' };
+    case 'HR_MANAGEMENT':
+      return { icon: Building2, color: 'text-cyan-600 bg-cyan-50 border-cyan-200' };
     case 'SYSTEM':
       return { icon: AlertTriangle, color: 'text-red-600 bg-red-50 border-red-200' };
     default:
@@ -62,7 +63,7 @@ function getNotificationIcon(type: NotificationType | string) {
 }
 
 export const Navbar: React.FC = () => {
-  const { user, logout, canAccessAllBrands } = useAuth();
+  const { user, logout, canAccessAllBrands, isAttendanceViewer, isAdmin } = useAuth();
   const { companies, activeCompany, setActiveCompanyId, canSwitchCompany } = useCompany();
   const { brands, selectedBrandId, setSelectedBrandId } = useBrand();
   const navigate = useNavigate();
@@ -74,21 +75,11 @@ export const Navbar: React.FC = () => {
   const [recentNotifications, setRecentNotifications] = useState<NotificationItem[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const roleLabels: Record<string, string> = {
-    SUPER_ADMIN: 'Super Admin',
-    COMPANY_ADMIN: 'Company Admin',
-    COMPANY_HR: 'Company HR',
-    GROUP_HR: 'Group HR',
-    BRAND_HR: 'Brand HR',
-    MANAGER: 'Manager',
-    EMPLOYEE: 'Employee'
-  };
-
-  // Fetch unread count
+  // Fetch unread count for current active company (HR & Admin only)
   const fetchUnreadCount = async () => {
-    if (!user) return;
+    if (!user || isAttendanceViewer) return;
     try {
-      const res = await api.getUnreadNotificationCount();
+      const res = await api.getUnreadNotificationCount(activeCompany?.id);
       setUnreadCount(res.unreadCount);
     } catch {
       // Ignore background poll errors
@@ -97,9 +88,10 @@ export const Navbar: React.FC = () => {
 
   // Fetch recent notifications when dropdown opens
   const fetchRecentNotifications = async () => {
+    if (isAttendanceViewer) return;
     try {
       setLoading(true);
-      const res = await api.getNotifications({ limit: 6 });
+      const res = await api.getNotifications({ limit: 6, companyId: activeCompany?.id });
       setRecentNotifications(res.data);
       if (res.meta?.unreadCount !== undefined) {
         setUnreadCount(res.meta.unreadCount);
@@ -113,10 +105,15 @@ export const Navbar: React.FC = () => {
 
   // Initial fetch and 30-second background poll
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [user]);
+    if (!isAttendanceViewer) {
+      fetchUnreadCount();
+      if (isOpen) {
+        fetchRecentNotifications();
+      }
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user, activeCompany?.id, isAttendanceViewer]);
 
   // Handle open dropdown
   const handleToggleDropdown = () => {
@@ -157,7 +154,7 @@ export const Navbar: React.FC = () => {
   // Mark all notifications as read
   const handleMarkAllAsRead = async () => {
     try {
-      await api.markAllNotificationsAsRead();
+      await api.markAllNotificationsAsRead(activeCompany?.id);
       setRecentNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (err) {
@@ -184,7 +181,9 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg text-indigo-900">
           <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
           <span className="text-xs font-medium text-indigo-600 hidden sm:inline">Company:</span>
-          {canSwitchCompany ? (
+          {companies.length === 0 ? (
+            <span className="text-xs font-semibold text-amber-700">No Company Assigned</span>
+          ) : canSwitchCompany ? (
             <select
               value={activeCompany?.id || ''}
               onChange={(e) => setActiveCompanyId(e.target.value)}
@@ -230,13 +229,9 @@ export const Navbar: React.FC = () => {
 
       {/* User profile & actions */}
       <div className="flex items-center gap-3 sm:gap-4">
-        {/* Role Pill */}
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs text-slate-600 font-medium">
-          <Shield className="w-3.5 h-3.5 text-slate-500" />
-          <span>{user?.role ? roleLabels[user.role] || user.role : 'User'}</span>
-        </div>
 
         {/* ----------------- NOTIFICATION BELL & DROPDOWN ----------------- */}
+        {!isAttendanceViewer && (
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={handleToggleDropdown}
@@ -339,12 +334,20 @@ export const Navbar: React.FC = () => {
                             {notif.message}
                           </p>
 
-                          {notif.actionUrl && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 mt-1 group-hover:underline">
-                              <span>Open record</span>
-                              <ChevronRight className="w-2.5 h-2.5" />
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {notif.company && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600 truncate max-w-[130px]">
+                                <Building2 className="w-2.5 h-2.5 shrink-0 text-slate-500" />
+                                <span className="truncate">{notif.company.name}</span>
+                              </span>
+                            )}
+                            {notif.actionUrl && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 group-hover:underline">
+                                <span>Open record</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Unread dot / Mark read on hover */}
@@ -381,13 +384,27 @@ export const Navbar: React.FC = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* User Info & Logout */}
         <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
           <div className="text-right hidden sm:block">
-            <p className="text-xs font-semibold text-slate-900 leading-tight">
-              {user?.firstName} {user?.lastName}
-            </p>
+            <div className="flex items-center gap-1.5 justify-end">
+              <span className="text-xs font-semibold text-slate-900 leading-tight">
+                {user?.firstName} {user?.lastName}
+              </span>
+              <span
+                className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
+                  user?.role === 'ADMIN'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : user?.role === 'ATTENDANCE_VIEWER'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                    : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                }`}
+              >
+                {user?.role === 'ATTENDANCE_VIEWER' ? 'Viewer' : user?.role || 'User'}
+              </span>
+            </div>
             <p className="text-[11px] text-slate-500 leading-tight truncate max-w-[160px]">
               {user?.email}
             </p>

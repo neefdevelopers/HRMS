@@ -19,11 +19,11 @@ interface PayrollSummaryProps {
 
 export const PayrollSummaryCard: React.FC<PayrollSummaryProps> = ({ payroll }) => {
   const { user } = useAuth();
-  const canAccessPayroll = ['SUPER_ADMIN', 'GROUP_HR', 'BRAND_HR'].includes(user?.role || '');
+  const canAccessPayroll = user?.role === 'ADMIN' || user?.role === 'HR';
 
   if (!canAccessPayroll) {
     return (
-      <Card title="Monthly Payroll Summary" subtitle="Restricted financial overview">
+      <Card title="Monthly Payroll Summary">
         <div className="py-6 text-center">
           <ShieldAlert className="w-8 h-8 text-slate-300 mx-auto mb-2" />
           <p className="text-xs text-slate-500 font-medium">
@@ -44,7 +44,6 @@ export const PayrollSummaryCard: React.FC<PayrollSummaryProps> = ({ payroll }) =
   return (
     <Card
       title="Monthly Payroll Summary"
-      subtitle={`Payroll overview for cycle ${payroll?.period || 'current month'}`}
       action={
         payroll?.configured && payroll?.status ? (
           <Badge variant={statusVariants[payroll.status] || 'neutral'}>

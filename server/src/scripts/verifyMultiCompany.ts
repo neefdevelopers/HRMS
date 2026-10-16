@@ -1,5 +1,7 @@
-import { prisma } from '../config/prisma.js';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
 
 async function runMultiCompanyVerification() {
   console.log('=====================================================');
@@ -180,7 +182,7 @@ async function runMultiCompanyVerification() {
         passwordHash: hashedPassword,
         firstName: 'Marcus',
         lastName: 'Vance',
-        role: 'COMPANY_ADMIN',
+        role: 'ADMIN',
         companyId: companyB.id,
         brandId: brandB.id,
         branchId: branchB.id
@@ -201,7 +203,7 @@ async function runMultiCompanyVerification() {
       data: {
         userId: userB.id,
         companyId: companyB.id,
-        role: 'COMPANY_ADMIN',
+        role: 'ADMIN',
         isActive: true
       }
     });
@@ -304,30 +306,51 @@ async function runMultiCompanyVerification() {
   assert(intraCompanyDuplicateBlocked, '16. Scoped uniqueness verified: Duplicate employeeId within SAME company is blocked');
 
   // -----------------------------------------------------------------
-  // 8. DEMO ACCOUNTS AND PLATFORM SUPER ADMIN VERIFICATION
+  // 8. DEMO ACCOUNTS AND TWO-ROLE VERIFICATION (ADMIN & HR)
   // -----------------------------------------------------------------
-  console.log('\n--- Verifying Demo Accounts & Platform Administration ---');
+  console.log('\n--- Verifying Demo Accounts & Two-Role System (ADMIN & HR) ---');
 
-  const superAdmin = await prisma.user.findUnique({
-    where: { email: 'superadmin@hrms.local' }
+  const adminUser = await prisma.user.findUnique({
+    where: { email: 'admin@hrms.local' }
   });
-  assert(superAdmin?.role === 'SUPER_ADMIN', '17. Platform Super Admin (superadmin@hrms.local) remains active');
+  assert(adminUser?.role === 'ADMIN', '17. Platform Admin (admin@hrms.local) has ADMIN role');
 
-  const groupHr = await prisma.user.findUnique({
-    where: { email: 'grouphr@hrms.local' },
+  const hrApex = await prisma.user.findUnique({
+    where: { email: 'hr.apex@hrms.local' },
     include: { memberships: true }
   });
-  assert(!!groupHr && groupHr.memberships.length > 0, '18. Group HR / Company HR (grouphr@hrms.local) has active membership in Apex Group');
+  assert(
+    !!hrApex && hrApex.role === 'HR' && hrApex.memberships.length === 1 && hrApex.memberships[0].companyId === companyA!.id,
+    '18. Single-Company HR (hr.apex@hrms.local) has HR role and is assigned to Company A only'
+  );
 
-  const apexHr = await prisma.user.findUnique({
-    where: { email: 'apex.hr@hrms.local' }
+  const hrMulti = await prisma.user.findUnique({
+    where: { email: 'hr.multi@hrms.local' },
+    include: { memberships: true }
   });
-  assert(!!apexHr && apexHr.brandId !== null, '19. Brand HR (apex.hr@hrms.local) maintains assigned brand and credentials');
+  assert(
+    !!hrMulti && hrMulti.role === 'HR' && hrMulti.memberships.length >= 2,
+    '19. Multi-Company HR (hr.multi@hrms.local) has HR role and is assigned to both Company A and B'
+  );
 
-  const demoEmployee = await prisma.user.findUnique({
+  const hrUnassigned = await prisma.user.findUnique({
+    where: { email: 'hr.unassigned@hrms.local' },
+    include: { memberships: true }
+  });
+  assert(
+    !!hrUnassigned && hrUnassigned.role === 'HR' && hrUnassigned.memberships.length === 0,
+    '20. Unassigned HR (hr.unassigned@hrms.local) has HR role with 0 company memberships'
+  );
+
+  const quarantinedSuperAdmin = await prisma.user.findUnique({
+    where: { email: 'superadmin@hrms.local' }
+  });
+  assert(!quarantinedSuperAdmin || !quarantinedSuperAdmin.isActive, '21. Former Super Admin demo account is quarantined / inactive');
+
+  const quarantinedEmp = await prisma.user.findUnique({
     where: { email: 'employee.apex@hrms.local' }
   });
-  assert(!!demoEmployee && demoEmployee.employeeId !== null, '20. Demo Employee (employee.apex@hrms.local) profile link intact');
+  assert(!quarantinedEmp || !quarantinedEmp.isActive, '22. Former Employee demo account is quarantined / inactive');
 
   console.log('\n=====================================================');
   console.log(` SUMMARY: ${passed} PASSED, ${failed} FAILED`);

@@ -62,11 +62,7 @@ export interface AssetsDocumentsPageProps {
 export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode = 'all' }) => {
   const { selectedBrandId } = useBrand();
   const { user } = useAuth();
-  const isHrOrAdmin =
-    user?.role === 'SUPER_ADMIN' ||
-    user?.role === 'GROUP_HR' ||
-    user?.role === 'BRAND_HR' ||
-    user?.role === 'MANAGER';
+  const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
 
   // Active section tab: 'assets' | 'documents' | 'reminders'
   const [activeTab, setActiveTab] = useState<'assets' | 'documents' | 'reminders'>(() => {
@@ -643,13 +639,6 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
               ? 'Employee Documents & Compliance'
               : 'Assets & Documents'}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            {mode === 'assets'
-              ? 'Track company hardware assets, serial numbers, assignments, and returns across branches.'
-              : mode === 'documents'
-              ? 'Manage employee contracts, certificates, company letters, and automated expiry reminders.'
-              : 'Track company hardware assets, employee letters & contracts, and automated expiry reminders.'}
-          </p>
         </div>
 
         {/* Tab switchers: only show tabs if mode is 'all' or 'documents' */}

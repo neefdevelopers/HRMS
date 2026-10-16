@@ -33,7 +33,7 @@ async function migrate() {
       "id" TEXT NOT NULL PRIMARY KEY,
       "userId" TEXT NOT NULL,
       "companyId" TEXT NOT NULL,
-      "role" TEXT NOT NULL DEFAULT 'EMPLOYEE',
+      "role" TEXT NOT NULL DEFAULT 'COMPANY_HR',
       "isActive" BOOLEAN NOT NULL DEFAULT 1,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -92,8 +92,8 @@ async function migrate() {
   console.log('4. Backfilling existing brands, employees, and tenant records...');
   for (const table of tablesToScope) {
     if (table === 'User') {
-      // Super admin remains platform-level (companyId can be null), other users get assigned to Apex Corp
-      await prisma.$executeRawUnsafe(`UPDATE "User" SET "companyId" = '${initialCompanyId}' WHERE "companyId" IS NULL AND "role" != 'SUPER_ADMIN';`);
+      // Admin remains platform-level (companyId can be null), other users get assigned to Apex Corp
+      await prisma.$executeRawUnsafe(`UPDATE "User" SET "companyId" = '${initialCompanyId}' WHERE "companyId" IS NULL AND "role" != 'ADMIN';`);
     } else {
       await prisma.$executeRawUnsafe(`UPDATE "${table}" SET "companyId" = '${initialCompanyId}' WHERE "companyId" IS NULL;`);
     }
@@ -103,11 +103,7 @@ async function migrate() {
   console.log('5. Creating Company Memberships for existing users...');
   const users: any[] = await prisma.$queryRawUnsafe(`SELECT "id", "email", "role" FROM "User";`);
   for (const u of users) {
-    // Map roles:
-    // SUPER_ADMIN has platform role SUPER_ADMIN, plus membership as COMPANY_ADMIN
-    // GROUP_HR maps to COMPANY_HR
-    // BRAND_HR, MANAGER, EMPLOYEE retain their role
-    const membershipRole = u.role === 'SUPER_ADMIN' ? 'COMPANY_ADMIN' : (u.role === 'GROUP_HR' ? 'COMPANY_HR' : u.role);
+    const membershipRole = u.role === 'ADMIN' ? 'ADMIN' : 'HR';
     await prisma.$executeRawUnsafe(`
       INSERT OR REPLACE INTO "CompanyMembership" ("id", "userId", "companyId", "role", "isActive", "createdAt", "updatedAt")
       VALUES ('mem-${u.id}', '${u.id}', '${initialCompanyId}', '${membershipRole}', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

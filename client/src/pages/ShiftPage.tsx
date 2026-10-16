@@ -30,8 +30,7 @@ import {
 export const ShiftPage: React.FC = () => {
   const { selectedBrandId } = useBrand();
   const { user } = useAuth();
-  const isHrOrAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR' || user?.role === 'BRAND_HR' || user?.role === 'MANAGER';
-  const isEmployee = user?.role === 'EMPLOYEE';
+  const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
 
   // 3 Primary Tabs
   const [activeTab, setActiveTab] = useState<'shifts' | 'assignments' | 'calendar_attendance'>('shifts');
@@ -45,7 +44,6 @@ export const ShiftPage: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [calendarData, setCalendarData] = useState<ShiftCalendarData | null>(null);
   const [attendanceData, setAttendanceData] = useState<ShiftAttendanceData | null>(null);
-  const [myShiftData, setMyShiftData] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,16 +110,6 @@ export const ShiftPage: React.FC = () => {
           status: 'ACTIVE'
         });
         setEmployees(Array.isArray(empList) ? empList : []);
-      }
-
-      // If employee, load my shift
-      if (isEmployee) {
-        try {
-          const myShift = await api.getMyShift();
-          setMyShiftData(myShift);
-        } catch (e) {
-          console.warn('Could not load my shift:', e);
-        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load shift records');
@@ -346,9 +334,6 @@ export const ShiftPage: React.FC = () => {
               Simple & Minimal
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure work shifts, manage employee rotations, view monthly rosters, and track shift-based attendance.
-          </p>
         </div>
 
         {/* Action Buttons for HR/Admin */}
@@ -387,39 +372,6 @@ export const ShiftPage: React.FC = () => {
         </div>
       )}
 
-      {/* Employee Quick Shift Banner (Requirement 7) */}
-      {myShiftData && (
-        <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-blue-900">My Assigned Shift:</span>
-                <span className="text-xs font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200">
-                  {myShiftData.currentShift?.name} ({myShiftData.currentShift?.code})
-                </span>
-                {myShiftData.isRotational && (
-                  <span className="text-[10px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                    Rotational Active
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-blue-700 mt-1 flex flex-wrap items-center gap-3">
-                <span>⏰ <strong>Timing:</strong> {myShiftData.currentShift?.startTime} – {myShiftData.currentShift?.endTime}</span>
-                <span>☕ <strong>Break:</strong> {myShiftData.currentShift?.breakMinutes}m</span>
-                <span>📅 <strong>Weekly Off:</strong> {myShiftData.currentShift?.weeklyOff}</span>
-                {myShiftData.isWeeklyOffToday && (
-                  <span className="text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded text-[11px]">
-                    Today is your Weekly Off
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Navigation Tabs (Strictly 3 Main Sections per Requirement 7) */}
       <div className="flex border-b border-slate-200 gap-6">
@@ -582,9 +534,6 @@ export const ShiftPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-800">Employee Shift Assignments</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Active assignments and rotational schedule configurations for staff.
-              </p>
             </div>
             {isHrOrAdmin && (
               <button

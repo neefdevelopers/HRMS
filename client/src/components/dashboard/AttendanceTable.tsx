@@ -3,7 +3,7 @@ import { Card } from '../common/Card';
 import { Badge, BadgeVariant } from '../common/Badge';
 import { Attendance, AttendanceStatus } from '../../types';
 import { api } from '../../services/api';
-import { Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Edit3 } from 'lucide-react';
+import { Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Edit3, CalendarCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../common/Modal';
 import { useAuth } from '../../context/AuthContext';
@@ -20,7 +20,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
   onRefreshParent
 }) => {
   const navigate = useNavigate();
-  const { canManageAttendance } = useAuth();
+  const { canManageAttendance, canManageEmployees } = useAuth();
 
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,7 +117,6 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
   return (
     <Card
       title="Daily Attendance Records"
-      subtitle={`Detailed attendance registry for date ${selectedDate}`}
       action={
         <button
           onClick={fetchAttendanceData}
@@ -141,20 +140,49 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-700"
-          >
-            <option value="">All Statuses</option>
-            <option value="PRESENT">Present</option>
-            <option value="LATE">Late</option>
-            <option value="ON_LEAVE">On Leave</option>
-            <option value="HALF_DAY">Half Day</option>
-            <option value="ABSENT">Absent</option>
-          </select>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          {/* Quick toggle between All Attendance and Employees on Leave */}
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                statusFilter === ''
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Attendance
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ON_LEAVE')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                statusFilter === 'ON_LEAVE'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CalendarCheck className="w-3.5 h-3.5" />
+              On Leave
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500 text-slate-700"
+            >
+              <option value="">Status Filter</option>
+              <option value="PRESENT">Present</option>
+              <option value="LATE">Late</option>
+              <option value="ON_LEAVE">On Leave</option>
+              <option value="HALF_DAY">Half Day</option>
+              <option value="ABSENT">Absent</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -190,8 +218,14 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
               filteredRecords.map((att) => (
                 <tr
                   key={att.id}
-                  onClick={() => navigate(`/employees?search=${att.employee?.employeeId}`)}
-                  className="hover:bg-slate-50/70 cursor-pointer transition-colors"
+                  onClick={() => {
+                    if (canManageEmployees) {
+                      navigate(`/employees?search=${att.employee?.employeeId}`);
+                    }
+                  }}
+                  className={`hover:bg-slate-50/70 transition-colors ${
+                    canManageEmployees ? 'cursor-pointer' : 'cursor-default'
+                  }`}
                 >
                   <td className="px-4 py-3">
                     <div className="font-semibold text-slate-900">

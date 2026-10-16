@@ -74,20 +74,11 @@ export const getLeaveRequests = async (req: AuthenticatedRequest, res: Response)
 
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        where.brandId = req.user.brandId;
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId) {
-      where.employeeId = req.user.employeeId;
-    } else if (employeeId) {
+    if (employeeId) {
       where.employeeId = employeeId;
     }
 
@@ -231,34 +222,22 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // Notify approver/HR or employee
+    // Notify authorized HR & Admin of the company
     try {
-      if (req.user?.role === Role.EMPLOYEE) {
-        const approverUserIds = await notificationService.getApproverUserIdsForEmployee(targetEmployeeId);
-        await notificationService.notifyUsers(approverUserIds, {
-          title: 'New Leave Request Submitted',
-          message: `${employee.firstName} ${employee.lastName} applied for leave from ${data.startDate} to ${data.endDate}.`,
+      const hrUserIds = await notificationService.getHrUserIdsForBrand(employee.brandId);
+      await notificationService.notifyUsers(
+        hrUserIds.filter((id) => id !== req.user?.id),
+        {
+          companyId: employee.companyId,
+          title: 'Leave Recorded by HR',
+          message: `Leave recorded for ${employee.firstName} ${employee.lastName} from ${data.startDate} to ${data.endDate} (${leaveRequest.leaveType.name}).`,
           type: 'LEAVE',
           module: 'leave',
           recordId: leaveRequest.id,
           actionUrl: '/leave',
-          eventKeyPrefix: `leave-apply-${leaveRequest.id}`
-        });
-      } else {
-        const empUserId = await notificationService.getUserIdByEmployeeId(targetEmployeeId);
-        if (empUserId && empUserId !== req.user?.id) {
-          await notificationService.createNotification({
-            userId: empUserId,
-            title: 'Leave Recorded by HR',
-            message: `Leave has been recorded for you from ${data.startDate} to ${data.endDate}.`,
-            type: 'LEAVE',
-            module: 'leave',
-            recordId: leaveRequest.id,
-            actionUrl: '/leave',
-            eventKey: `leave-recorded-${leaveRequest.id}`
-          });
+          eventKeyPrefix: `leave-recorded-${leaveRequest.id}`
         }
-      }
+      );
     } catch (notifErr: any) {
       console.error('[LeaveController] Notification error on applyLeave:', notifErr.message);
     }
@@ -386,24 +365,25 @@ export const reviewLeave = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
-    // Notify employee of review outcome
+    // Notify authorized HR & Admin of the company
     try {
-      const empUserId = await notificationService.getUserIdByEmployeeId(leave.employeeId);
-      if (empUserId) {
-        const isApproved = status === 'APPROVED';
-        const title = isApproved ? 'Leave Request Approved' : 'Leave Request Rejected';
-        const reasonSnippet = !isApproved && rejectionReason ? ` Reason: ${rejectionReason}` : '';
-        await notificationService.createNotification({
-          userId: empUserId,
+      const hrUserIds = await notificationService.getHrUserIdsForBrand(leave.brandId || leave.employee.brandId);
+      const isApproved = status === 'APPROVED';
+      const title = isApproved ? 'Leave Request Approved' : 'Leave Request Rejected';
+      const reasonSnippet = !isApproved && rejectionReason ? ` Reason: ${rejectionReason}` : '';
+      await notificationService.notifyUsers(
+        hrUserIds.filter((id) => id !== req.user?.id),
+        {
+          companyId: leave.companyId || leave.employee.companyId,
           title,
-          message: `Your leave request for ${leave.startDate} to ${leave.endDate} was ${status.toLowerCase()}.${reasonSnippet}`,
+          message: `${leave.employee.firstName} ${leave.employee.lastName}'s leave request (${leave.startDate} to ${leave.endDate}) was ${status.toLowerCase()}.${reasonSnippet}`,
           type: 'LEAVE',
           module: 'leave',
           recordId: leave.id,
           actionUrl: '/leave',
-          eventKey: `leave-review-${leave.id}-${status}`
-        });
-      }
+          eventKeyPrefix: `leave-review-${leave.id}-${status}`
+        }
+      );
     } catch (notifErr: any) {
       console.error('[LeaveController] Notification error on reviewLeave:', notifErr.message);
     }

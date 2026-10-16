@@ -26,7 +26,7 @@ export const LeavePage: React.FC = () => {
     reason: ''
   });
 
-  const canManageLeaves = ['SUPER_ADMIN', 'GROUP_HR', 'BRAND_HR', 'MANAGER'].includes(user?.role || '');
+  const canManageLeaves = user?.role === 'ADMIN' || user?.role === 'HR';
 
   const loadData = async () => {
     try {
@@ -125,9 +125,6 @@ export const LeavePage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Employee Leaves</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Directly record and manage employee leaves without approval queues.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -212,7 +209,7 @@ export const LeavePage: React.FC = () => {
       </div>
 
       {/* Recorded Leaves Table */}
-      <Card title="Recorded Leaves" subtitle="Directly recorded employee leave records">
+      <Card title="Recorded Leaves">
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">

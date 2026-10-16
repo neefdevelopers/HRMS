@@ -13,9 +13,13 @@ server/dist/
 *.db-journal
 *.bak
 *.bak*
+*.backup
+*.backup*
 server/prisma/*.db
 server/prisma/*.db-journal
 server/prisma/*.bak*
+server/prisma/*.backup*
+
 
 # Environment Variables & Secrets
 .env

@@ -6,7 +6,7 @@ export interface CreateNotificationInput {
   companyId?: string | null;
   title: string;
   message: string;
-  type: 'LEAVE' | 'ATTENDANCE' | 'SALARY' | 'EMPLOYEE' | 'EXIT' | 'SYSTEM' | 'INFO' | string;
+  type: 'LEAVE' | 'ATTENDANCE' | 'SALARY' | 'EMPLOYEE' | 'EXIT' | 'HR_MANAGEMENT' | 'SYSTEM' | 'INFO' | string;
   module?: string;
   recordId?: string;
   actionUrl?: string;
@@ -18,6 +18,8 @@ export interface NotificationFilters {
   limit?: number;
   isRead?: boolean;
   type?: string;
+  companyId?: string | null;
+  search?: string;
 }
 
 export class NotificationService {
@@ -32,7 +34,12 @@ export class NotificationService {
     // Deduplication check via eventKey if provided
     if (data.eventKey) {
       const existing = await prisma.notification.findUnique({
-        where: { eventKey: data.eventKey }
+        where: { eventKey: data.eventKey },
+        include: {
+          company: {
+            select: { id: true, name: true, code: true, logo: true }
+          }
+        }
       });
       if (existing) {
         return existing;
@@ -51,13 +58,23 @@ export class NotificationService {
           recordId: data.recordId || null,
           actionUrl: data.actionUrl || null,
           eventKey: data.eventKey || null
+        },
+        include: {
+          company: {
+            select: { id: true, name: true, code: true, logo: true }
+          }
         }
       });
     } catch (err: any) {
       // In case of unique constraint race condition on eventKey
       if (err.code === 'P2002' && data.eventKey) {
         return await prisma.notification.findUnique({
-          where: { eventKey: data.eventKey }
+          where: { eventKey: data.eventKey },
+          include: {
+            company: {
+              select: { id: true, name: true, code: true, logo: true }
+            }
+          }
         });
       }
       console.error('[NotificationService] Failed to create notification:', err.message);
@@ -95,6 +112,32 @@ export class NotificationService {
   }
 
   /**
+   * Resolves recipient HR and Admin user IDs for a given company.
+   */
+  async getHrUserIdsForCompany(companyId: string): Promise<string[]> {
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { role: Role.ADMIN },
+          {
+            role: Role.HR,
+            memberships: {
+              some: {
+                companyId,
+                isActive: true
+              }
+            }
+          }
+        ]
+      },
+      select: { id: true }
+    });
+
+    return users.map((u) => u.id);
+  }
+
+  /**
    * Resolves recipient HR user IDs for a given brand scoped to company.
    */
   async getHrUserIdsForBrand(brandId?: string | null): Promise<string[]> {
@@ -104,39 +147,11 @@ export class NotificationService {
       if (brand) companyId = brand.companyId;
     }
 
-    const whereConditions: any[] = [
-      { role: Role.SUPER_ADMIN }
-    ];
-
     if (companyId) {
-      whereConditions.push(
-        { role: 'COMPANY_ADMIN', companyId },
-        { role: 'COMPANY_HR', companyId },
-        { role: 'GROUP_HR', companyId }
-      );
-      if (brandId) {
-        whereConditions.push({ role: Role.BRAND_HR, brandId, companyId });
-      } else {
-        whereConditions.push({ role: Role.BRAND_HR, companyId });
-      }
-    } else {
-      whereConditions.push(
-        { role: 'COMPANY_ADMIN' },
-        { role: 'COMPANY_HR' },
-        { role: 'GROUP_HR' },
-        { role: Role.BRAND_HR }
-      );
+      return this.getHrUserIdsForCompany(companyId);
     }
 
-    const hrUsers = await prisma.user.findMany({
-      where: {
-        isActive: true,
-        OR: whereConditions
-      },
-      select: { id: true }
-    });
-
-    return hrUsers.map((u) => u.id);
+    return this.getAdminUserIds();
   }
 
   /**
@@ -152,7 +167,7 @@ export class NotificationService {
 
   /**
    * Resolves approver user IDs for an employee:
-   * Their direct reporting manager (if has user account) + authorized HRs of their brand.
+   * Direct manager (if has user account) + authorized HRs of their brand/company.
    */
   async getApproverUserIdsForEmployee(employeeId: string): Promise<string[]> {
     const employee = await prisma.employee.findUnique({
@@ -164,13 +179,13 @@ export class NotificationService {
 
     const approverUserIds: string[] = [];
 
-    // 1. Direct Reporting Manager user
+    // 1. Direct Reporting Manager user (if exists)
     if (employee.reportingManagerId) {
       const managerUser = await this.getUserIdByEmployeeId(employee.reportingManagerId);
       if (managerUser) approverUserIds.push(managerUser);
     }
 
-    // 2. Brand HR, Group HR, and Super Admin
+    // 2. HR & Admin users for this brand's company
     const hrUsers = await this.getHrUserIdsForBrand(employee.brandId);
     approverUserIds.push(...hrUsers);
 
@@ -184,7 +199,7 @@ export class NotificationService {
     const admins = await prisma.user.findMany({
       where: {
         isActive: true,
-        role: Role.SUPER_ADMIN
+        role: Role.ADMIN
       },
       select: { id: true }
     });
@@ -192,7 +207,7 @@ export class NotificationService {
   }
 
   /**
-   * Retrieves notifications for a specific user with pagination and optional read filter.
+   * Retrieves notifications for a specific user with pagination, company scoping, and search.
    */
   async getUserNotifications(userId: string, filters: NotificationFilters = {}) {
     const page = Math.max(1, filters.page || 1);
@@ -208,15 +223,65 @@ export class NotificationService {
       where.type = filters.type;
     }
 
+    // Tenant / Company scoping: filter by companyId if specified, or allow platform/system alerts (companyId = null)
+    if (filters.companyId && filters.companyId !== 'all') {
+      where.OR = [
+        { companyId: filters.companyId },
+        { companyId: null }
+      ];
+    }
+
+    // Keyword search over title and message
+    if (filters.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      const searchCriteria = {
+        OR: [
+          { title: { contains: term } },
+          { message: { contains: term } }
+        ]
+      };
+
+      if (where.OR) {
+        where.AND = [
+          { OR: where.OR },
+          searchCriteria
+        ];
+        delete where.OR;
+      } else {
+        where.AND = [searchCriteria];
+      }
+    }
+
+    const unreadWhere: any = {
+      userId,
+      isRead: false
+    };
+    if (filters.companyId && filters.companyId !== 'all') {
+      unreadWhere.OR = [
+        { companyId: filters.companyId },
+        { companyId: null }
+      ];
+    }
+
     const [notifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              logo: true
+            }
+          }
+        }
       }),
       prisma.notification.count({ where }),
-      prisma.notification.count({ where: { userId, isRead: false } })
+      prisma.notification.count({ where: unreadWhere })
     ]);
 
     return {
@@ -225,19 +290,24 @@ export class NotificationService {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 1,
         unreadCount
       }
     };
   }
 
   /**
-   * Returns unread notifications count for a user.
+   * Returns unread notifications count for a user, with optional company scoping.
    */
-  async getUnreadCount(userId: string): Promise<number> {
-    return prisma.notification.count({
-      where: { userId, isRead: false }
-    });
+  async getUnreadCount(userId: string, companyId?: string | null): Promise<number> {
+    const where: any = { userId, isRead: false };
+    if (companyId && companyId !== 'all') {
+      where.OR = [
+        { companyId },
+        { companyId: null }
+      ];
+    }
+    return prisma.notification.count({ where });
   }
 
   /**
@@ -257,7 +327,14 @@ export class NotificationService {
     }
 
     if (notif.isRead) {
-      return notif;
+      return prisma.notification.findUnique({
+        where: { id: notificationId },
+        include: {
+          company: {
+            select: { id: true, name: true, code: true, logo: true }
+          }
+        }
+      });
     }
 
     return prisma.notification.update({
@@ -265,19 +342,84 @@ export class NotificationService {
       data: {
         isRead: true,
         readAt: new Date()
+      },
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, logo: true }
+        }
       }
     });
   }
 
   /**
-   * Marks all notifications of a user as read.
+   * Marks a specific notification as unread.
    */
-  async markAllAsRead(userId: string) {
-    const result = await prisma.notification.updateMany({
-      where: {
-        userId,
-        isRead: false
+  async markAsUnread(notificationId: string, userId: string) {
+    const notif = await prisma.notification.findUnique({
+      where: { id: notificationId }
+    });
+
+    if (!notif) {
+      throw new Error('Notification not found.');
+    }
+
+    if (notif.userId !== userId) {
+      throw new Error('Access denied. You do not own this notification.');
+    }
+
+    return prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        isRead: false,
+        readAt: null
       },
+      include: {
+        company: {
+          select: { id: true, name: true, code: true, logo: true }
+        }
+      }
+    });
+  }
+
+  /**
+   * Deletes a specific notification with user ownership enforcement.
+   */
+  async deleteNotification(notificationId: string, userId: string) {
+    const notif = await prisma.notification.findUnique({
+      where: { id: notificationId }
+    });
+
+    if (!notif) {
+      throw new Error('Notification not found.');
+    }
+
+    if (notif.userId !== userId) {
+      throw new Error('Access denied. You do not own this notification.');
+    }
+
+    return prisma.notification.delete({
+      where: { id: notificationId }
+    });
+  }
+
+  /**
+   * Marks all notifications of a user as read, optionally scoped by company.
+   */
+  async markAllAsRead(userId: string, companyId?: string | null) {
+    const where: any = {
+      userId,
+      isRead: false
+    };
+
+    if (companyId && companyId !== 'all') {
+      where.OR = [
+        { companyId },
+        { companyId: null }
+      ];
+    }
+
+    const result = await prisma.notification.updateMany({
+      where,
       data: {
         isRead: true,
         readAt: new Date()
@@ -285,6 +427,26 @@ export class NotificationService {
     });
 
     return { updatedCount: result.count };
+  }
+
+  /**
+   * Clears/deletes all read notifications for a user, optionally scoped by company.
+   */
+  async clearReadNotifications(userId: string, companyId?: string | null) {
+    const where: any = {
+      userId,
+      isRead: true
+    };
+
+    if (companyId && companyId !== 'all') {
+      where.OR = [
+        { companyId },
+        { companyId: null }
+      ];
+    }
+
+    const result = await prisma.notification.deleteMany({ where });
+    return { deletedCount: result.count };
   }
 }
 

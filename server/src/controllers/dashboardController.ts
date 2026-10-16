@@ -15,8 +15,8 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     const departmentId = req.query.departmentId as string;
     const effectiveCompanyId = req.effectiveCompanyId;
 
-    // Platform Super Admin without specific company selected: return platform overview
-    if (req.user?.platformRole === Role.SUPER_ADMIN && !effectiveCompanyId && req.query.scope === 'platform') {
+    // Admin without specific company selected or with scope=platform: return platform overview
+    if (req.user?.role === Role.ADMIN && (!effectiveCompanyId || req.query.scope === 'platform')) {
       const totalCompanies = await prisma.company.count();
       const activeCompanies = await prisma.company.count({ where: { isActive: true } });
       const totalBrands = await prisma.brand.count();
@@ -57,15 +57,8 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
 
     if (brandId && brandId !== 'all') {
       employeeBaseFilter.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        employeeBaseFilter.brandId = req.user.brandId;
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      employeeBaseFilter.brandId = req.user.brandId;
     }
 
     if (branchId) employeeBaseFilter.branchId = branchId;
@@ -220,13 +213,7 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
 
     // 7. Payroll Summary
     let payrollSummary: any = null;
-    const canViewPayroll = [
-      Role.SUPER_ADMIN,
-      Role.COMPANY_ADMIN,
-      Role.COMPANY_HR,
-      Role.GROUP_HR,
-      Role.BRAND_HR
-    ].includes(req.user?.role as any);
+    const canViewPayroll = req.user?.role === Role.ADMIN || req.user?.role === Role.HR;
 
     if (canViewPayroll) {
       const currentPeriod = selectedDate.substring(0, 7);

@@ -28,15 +28,8 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
     // Brand filtering & isolation
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        where.brandId = req.user.brandId;
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
     if (branchId) where.branchId = branchId;
@@ -116,18 +109,7 @@ export const getEmployeeById = async (req: AuthenticatedRequest, res: Response) 
       return sendError(res, 'Access denied for this employee record.', 403);
     }
 
-    // Role check: Employee can only see self; Brand HR can only see same brand
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== id) {
-      return sendError(res, 'Access denied. You can only view your own profile.', 403);
-    }
-
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== employee.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== employee.brandId) {
       return sendError(res, 'Access denied for this employee record.', 403);
     }
 
@@ -168,18 +150,7 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
       return sendError(res, 'Access denied for this employee record.', 403);
     }
 
-    // Role check: Employee can only see self; Brand HR can only see same brand
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId !== id) {
-      return sendError(res, 'Access denied. You can only view your own profile.', 403);
-    }
-
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== employee.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== employee.brandId) {
       return sendError(res, 'Access denied for this employee record.', 403);
     }
 
@@ -308,13 +279,6 @@ export const getEmployeeDocuments = async (req: AuthenticatedRequest, res: Respo
       return sendError(res, 'Access denied for this employee.', 403);
     }
 
-    if (
-      req.user?.role === Role.EMPLOYEE &&
-      req.user?.employeeId !== employeeId
-    ) {
-      return sendError(res, 'Access denied to view documents for this employee.', 403);
-    }
-
     const documents = await prisma.employeeDocument.findMany({
       where: { employeeId },
       orderBy: { createdAt: 'desc' }
@@ -344,13 +308,7 @@ export const uploadEmployeeDocument = async (req: AuthenticatedRequest, res: Res
       return sendError(res, 'Access denied for this employee.', 403);
     }
 
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== employee.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== employee.brandId) {
       return sendError(res, 'Access denied to upload documents for this employee.', 403);
     }
 
@@ -392,13 +350,7 @@ export const deleteEmployeeDocument = async (req: AuthenticatedRequest, res: Res
       return sendError(res, 'Access denied for this document.', 403);
     }
 
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== doc.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== doc.brandId) {
       return sendError(res, 'Access denied to delete this document.', 403);
     }
 
@@ -449,14 +401,7 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
       return sendError(res, 'Brand does not belong to the active company.', 403);
     }
 
-    // Enforce brand isolation on creation
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== data.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== data.brandId) {
       return sendError(res, 'Cannot create employees for a brand you do not manage.', 403);
     }
 
@@ -548,6 +493,7 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
     try {
       const hrUserIds = await notificationService.getHrUserIdsForBrand(employee.brandId);
       await notificationService.notifyUsers(hrUserIds, {
+        companyId: targetCompanyId,
         title: 'New Employee Registered',
         message: `${employee.firstName} ${employee.lastName} (${employee.employeeId}) has been onboarded into ${employee.brand.name}.`,
         type: 'EMPLOYEE',
@@ -584,14 +530,7 @@ export const updateEmployee = async (req: AuthenticatedRequest, res: Response) =
       return sendError(res, 'Access denied. Employee belongs to another company.', 403);
     }
 
-    // Role brand authorization check
-    if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== existing.brandId
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== existing.brandId) {
       return sendError(res, 'Access denied to update employee from this brand.', 403);
     }
 

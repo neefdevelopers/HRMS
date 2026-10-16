@@ -24,15 +24,9 @@ export const BrandsPage: React.FC = () => {
   const { user } = useAuth();
   const { activeCompany, companies } = useCompany();
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const isCompanyAdmin = user?.role === 'COMPANY_ADMIN';
-  const isCompanyHR = user?.role === 'COMPANY_HR' || user?.role === 'GROUP_HR';
-
-  // Role permissions:
-  // - Platform Super Admin can manage brands across companies.
-  // - Company Admin and Company HR can manage brands within their own company.
-  // - Brand HR and lower roles are strictly forbidden from managing brands.
-  const canManageBrands = isSuperAdmin || isCompanyAdmin || isCompanyHR;
+  const isAdmin = user?.role === 'ADMIN';
+  const isHr = user?.role === 'HR';
+  const canManageBrands = isAdmin || isHr;
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -127,7 +121,7 @@ export const BrandsPage: React.FC = () => {
     e.preventDefault();
     try {
       // Determine the company id
-      const targetCompanyId = isSuperAdmin ? brandForm.companyId : activeCompany?.id;
+      const targetCompanyId = isAdmin ? (brandForm.companyId || activeCompany?.id) : activeCompany?.id;
       if (!targetCompanyId) {
         alert('Please select a company for this brand.');
         return;
@@ -156,7 +150,7 @@ export const BrandsPage: React.FC = () => {
         name: brandForm.name,
         code: brandForm.code,
         companyName: brandForm.companyName,
-        companyId: isSuperAdmin ? brandForm.companyId : undefined,
+        companyId: isAdmin ? brandForm.companyId : undefined,
         email: brandForm.email || null,
         phone: brandForm.phone || null,
         address: brandForm.address || null
@@ -195,9 +189,6 @@ export const BrandsPage: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Manage company brands, operating branches, departments, and shifts. Every brand strictly belongs to a company.
-          </p>
         </div>
 
         {canManageBrands && (
@@ -343,7 +334,6 @@ export const BrandsPage: React.FC = () => {
         {/* Branches */}
         <Card
           title="Operating Branches"
-          subtitle={`Location and regional hubs ${activeCompany ? `under ${activeCompany.name}` : ''}`}
         >
           {branches.length === 0 ? (
             <p className="text-xs text-slate-400 py-4 text-center">No branches found for this company.</p>
@@ -372,7 +362,6 @@ export const BrandsPage: React.FC = () => {
         {/* Standard Shifts */}
         <Card
           title="Shift Configurations"
-          subtitle={`Working hours and grace periods ${activeCompany ? `under ${activeCompany.name}` : ''}`}
         >
           {shifts.length === 0 ? (
             <p className="text-xs text-slate-400 py-4 text-center">No shifts configured for this company.</p>
@@ -412,7 +401,7 @@ export const BrandsPage: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Parent Company *
             </label>
-            {isSuperAdmin ? (
+            {isAdmin ? (
               <select
                 required
                 value={brandForm.companyId}
@@ -548,7 +537,7 @@ export const BrandsPage: React.FC = () => {
           {/* Company info */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Parent Company</label>
-            {isSuperAdmin ? (
+            {isAdmin ? (
               <select
                 value={brandForm.companyId}
                 onChange={(e) => setBrandForm({ ...brandForm, companyId: e.target.value })}

@@ -17,21 +17,13 @@ export const getBrands = async (req: AuthenticatedRequest, res: Response) => {
     // Filter by company:
     // If effectiveCompanyId is set, enforce it.
     // If Super Admin with no effectiveCompanyId provided a specific companyId query, filter by it.
-    const companyFilter = effectiveCompanyId || (req.user?.platformRole === Role.SUPER_ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
+    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.companyId = companyFilter;
     }
 
     // Role-based brand filtering
-    if (
-      userRole !== Role.SUPER_ADMIN &&
-      userRole !== Role.COMPANY_ADMIN &&
-      userRole !== Role.COMPANY_HR &&
-      userRole !== Role.GROUP_HR
-    ) {
-      if (!userBrandId) {
-        return sendSuccess(res, []);
-      }
+    if (userRole === Role.HR && userBrandId) {
       whereClause.id = userBrandId;
     }
 
@@ -99,13 +91,7 @@ export const getBrandById = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Role brand-level check
-    if (
-      req.user?.platformRole !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR &&
-      req.user?.brandId !== id
-    ) {
+    if (req.user?.role === Role.HR && req.user?.brandId && req.user.brandId !== id) {
       return sendError(res, 'Access denied for this brand.', 403);
     }
 
@@ -134,8 +120,8 @@ export const createBrand = async (req: AuthenticatedRequest, res: Response) => {
 
     let targetCompanyId: string | undefined;
 
-    // Platform Super Admin can target any company; company-level users are strictly bound to their membership
-    if (req.user?.platformRole === Role.SUPER_ADMIN) {
+    // Platform Admin can target any company; company-level users are strictly bound to their membership
+    if (req.user?.role === Role.ADMIN) {
       targetCompanyId = validatedData.companyId || req.effectiveCompanyId || undefined;
     } else {
       targetCompanyId = req.effectiveCompanyId || undefined;
@@ -242,15 +228,15 @@ export const updateBrand = async (req: AuthenticatedRequest, res: Response) => {
 
     // Company isolation check
     if (
-      req.user?.platformRole !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.ADMIN &&
       existingBrand.companyId !== req.effectiveCompanyId
     ) {
       return sendError(res, 'Access denied. Brand belongs to another company.', 403);
     }
 
-    // If companyId is being changed, only Super Admin can do that
+    // If companyId is being changed, only Admin can do that
     if (validatedData.companyId && validatedData.companyId !== existingBrand.companyId) {
-      if (req.user?.platformRole !== Role.SUPER_ADMIN) {
+      if (req.user?.role !== Role.ADMIN) {
         return sendError(res, 'Access denied. You cannot transfer a brand to another company.', 403);
       }
       const targetCompany = await prisma.company.findUnique({ where: { id: validatedData.companyId } });
@@ -354,7 +340,7 @@ export const toggleBrandStatus = async (req: AuthenticatedRequest, res: Response
     }
 
     if (
-      req.user?.platformRole !== Role.SUPER_ADMIN &&
+      req.user?.role !== Role.ADMIN &&
       existingBrand.companyId !== req.effectiveCompanyId
     ) {
       return sendError(res, 'Access denied. Brand belongs to another company.', 403);
@@ -419,7 +405,7 @@ export const getBranches = async (req: AuthenticatedRequest, res: Response) => {
 
     const whereClause: any = {};
 
-    const companyFilter = effectiveCompanyId || (req.user?.platformRole === Role.SUPER_ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
+    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.brand = { companyId: companyFilter };
     }
@@ -448,7 +434,7 @@ export const getDepartments = async (req: AuthenticatedRequest, res: Response) =
 
     const whereClause: any = {};
 
-    const companyFilter = effectiveCompanyId || (req.user?.platformRole === Role.SUPER_ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
+    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.brand = { companyId: companyFilter };
     }
@@ -481,7 +467,7 @@ export const getDesignations = async (req: AuthenticatedRequest, res: Response) 
 
     const whereClause: any = {};
 
-    const companyFilter = effectiveCompanyId || (req.user?.platformRole === Role.SUPER_ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
+    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.brand = { companyId: companyFilter };
     }
@@ -510,7 +496,7 @@ export const getShifts = async (req: AuthenticatedRequest, res: Response) => {
 
     const whereClause: any = {};
 
-    const companyFilter = effectiveCompanyId || (req.user?.platformRole === Role.SUPER_ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
+    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
     if (companyFilter) {
       whereClause.brand = { companyId: companyFilter };
     }

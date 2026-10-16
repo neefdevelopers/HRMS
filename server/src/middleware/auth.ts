@@ -17,8 +17,8 @@ export interface UserMembershipSummary {
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  platformRole: string; // SUPER_ADMIN or ordinary user
-  role: string;         // Effective role in current company context
+  role: 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER';
+  platformRole?: string;
   companyId?: string | null;
   brandId?: string | null;
   branchId?: string | null;
@@ -72,6 +72,11 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       return sendError(res, 'User not found or inactive.', 401);
     }
 
+    const ALLOWED_ROLES = ['ADMIN', 'HR', 'ATTENDANCE_VIEWER'];
+    if (!ALLOWED_ROLES.includes(user.role)) {
+      return sendError(res, 'Access denied. Account role is no longer authorized.', 403);
+    }
+
     // Map user's company memberships
     const memberships: UserMembershipSummary[] = (user.memberships || []).map((m: any) => ({
       id: m.id,
@@ -88,11 +93,11 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
     const headerCompanyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string);
 
     let effectiveCompanyId: string | null = null;
-    let effectiveRole = user.role;
     let activeCompany: any = null;
+    let effectiveRole: 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER' = user.role as any;
 
-    // Platform Super Admin
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'ADMIN') {
+      // Admin has platform-wide administration and can switch to any registered active company workspace
       if (headerCompanyId && headerCompanyId !== 'all') {
         const targetComp = await prisma.company.findUnique({ where: { id: headerCompanyId } });
         if (targetComp) {
@@ -109,7 +114,6 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
         effectiveCompanyId = null;
         activeCompany = null;
       } else if (memberships.length > 0) {
-        // Fallback to first company membership if available
         const firstActive = memberships.find((m) => m.isActive && m.isCompanyActive) || memberships[0];
         if (firstActive) {
           effectiveCompanyId = firstActive.companyId;
@@ -122,20 +126,20 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
           };
         }
       }
+      effectiveRole = 'ADMIN';
     } else {
-      // Non-super-admin users must be strictly bound by validated membership
+      // Non-admin roles (HR, ATTENDANCE_VIEWER): MUST have active company membership
       const activeMemberships = memberships.filter((m) => m.isActive && m.isCompanyActive);
 
       if (headerCompanyId && headerCompanyId !== 'all') {
         const matchedMem = memberships.find((m) => m.companyId === headerCompanyId);
         if (!matchedMem || !matchedMem.isActive) {
-          return sendError(res, 'Access denied. You do not have an active membership in this company.', 403);
+          return sendError(res, 'Access denied. You do not have an active assignment to this company.', 403);
         }
         if (!matchedMem.isCompanyActive) {
-          return sendError(res, 'Company account is currently inactive. Please contact platform administration.', 403);
+          return sendError(res, 'Company account is currently inactive. Please contact administration.', 403);
         }
         effectiveCompanyId = matchedMem.companyId;
-        effectiveRole = matchedMem.role;
         activeCompany = {
           id: matchedMem.companyId,
           name: matchedMem.companyName,
@@ -143,12 +147,13 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
           logo: matchedMem.companyLogo,
           isActive: matchedMem.isCompanyActive
         };
+        // Set company-specific membership role!
+        effectiveRole = (matchedMem.role as 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER') || user.role as any;
       } else {
-        // Auto-select company if user has memberships
-        const primary = activeMemberships.find((m) => m.companyId === user.companyId) || activeMemberships[0];
-        if (primary) {
+        // Auto-select if user has active memberships
+        if (activeMemberships.length > 0) {
+          const primary = activeMemberships.find((m) => m.companyId === user.companyId) || activeMemberships[0];
           effectiveCompanyId = primary.companyId;
-          effectiveRole = primary.role;
           activeCompany = {
             id: primary.companyId,
             name: primary.companyName,
@@ -156,8 +161,11 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
             logo: primary.companyLogo,
             isActive: primary.isCompanyActive
           };
-        } else if (memberships.length > 0 && activeMemberships.length === 0) {
-          return sendError(res, 'Your company account is inactive. Please contact platform administration.', 403);
+          effectiveRole = (primary.role as 'ADMIN' | 'HR' | 'ATTENDANCE_VIEWER') || user.role as any;
+        } else {
+          // User has 0 active company assignments
+          effectiveCompanyId = null;
+          activeCompany = null;
         }
       }
     }

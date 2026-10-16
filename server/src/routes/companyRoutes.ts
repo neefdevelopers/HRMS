@@ -8,22 +8,32 @@ import {
   toggleCompanyStatus,
   assignCompanyAdmin
 } from '../controllers/companyController.js';
+import {
+  getCompanyHrUsers,
+  assignCompanyHrUser,
+  removeCompanyHrUser
+} from '../controllers/hrManagementController.js';
 import { authenticate } from '../middleware/auth.js';
 import { authorizeRoles, Role } from '../middleware/rbac.js';
 
 const router = Router();
 
-// All company management routes require authentication
+// All company management routes require authentication and ADMIN role
 router.use(authenticate);
+router.use(authorizeRoles(Role.ADMIN));
 
-// Platform Super Admin exclusive routes
-router.get('/', authorizeRoles(Role.SUPER_ADMIN), getCompanies);
-router.post('/', authorizeRoles(Role.SUPER_ADMIN), createCompany);
-router.get('/:id', authorizeRoles(Role.SUPER_ADMIN), getCompanyById);
-router.get('/:id/overview', authorizeRoles(Role.SUPER_ADMIN), getCompanyOverview);
-router.put('/:id', authorizeRoles(Role.SUPER_ADMIN), updateCompany);
-router.patch('/:id/status', authorizeRoles(Role.SUPER_ADMIN), toggleCompanyStatus);
-router.post('/:id/admin', authorizeRoles(Role.SUPER_ADMIN), assignCompanyAdmin);
-router.post('/:id/admins', authorizeRoles(Role.SUPER_ADMIN), assignCompanyAdmin);
+router.get('/', getCompanies);
+router.post('/', createCompany);
+router.get('/:id', getCompanyById);
+router.get('/:id/overview', getCompanyOverview);
+router.put('/:id', updateCompany);
+router.patch('/:id/status', toggleCompanyStatus);
+router.post('/:id/admin', assignCompanyAdmin);
+router.post('/:id/admins', assignCompanyAdmin);
+
+// Per-company HR assignments
+router.get('/:id/hr-users', getCompanyHrUsers);
+router.post('/:id/hr-users', assignCompanyHrUser);
+router.delete('/:id/hr-users/:userId', removeCompanyHrUser);
 
 export default router;

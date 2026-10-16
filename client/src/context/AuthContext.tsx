@@ -6,14 +6,20 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
-  isSuperAdmin: boolean;
-  isCompanyAdmin: boolean;
+  isAdmin: boolean;
+  isHr: boolean;
+  isAttendanceViewer: boolean;
+  isSuperAdmin: boolean; // Alias to isAdmin for backward compatibility
+  isCompanyAdmin: boolean; // Alias to isAdmin
   canAccessAllBrands: boolean;
   canManageEmployees: boolean;
   canManageAttendance: boolean;
+  canManageCompanies: boolean;
+  canManageHrUsers: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,31 +29,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('hrms_token'));
   const [loading, setLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
+  const fetchUser = async () => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const userData = await api.getMe();
+      setUser(userData);
+      if (userData.activeCompany?.id && !localStorage.getItem('hrms_active_company_id')) {
+        localStorage.setItem('hrms_active_company_id', userData.activeCompany.id);
       }
-      try {
-        const userData = await api.getMe();
-        setUser(userData);
-        if (userData.activeCompany?.id && !localStorage.getItem('hrms_active_company_id')) {
-          localStorage.setItem('hrms_active_company_id', userData.activeCompany.id);
-        }
-      } catch (err) {
-        console.error('Failed to restore session:', err);
-        localStorage.removeItem('hrms_token');
-        localStorage.removeItem('hrms_active_company_id');
-        setToken(null);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+    } catch (err) {
+      console.error('Failed to restore session:', err);
+      localStorage.removeItem('hrms_token');
+      localStorage.removeItem('hrms_active_company_id');
+      setToken(null);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchUser();
   }, [token]);
+
+  // Recalculate user role immediately when active company changes
+  useEffect(() => {
+    const handleCompanyChange = (e: any) => {
+      const targetCompanyId = e.detail?.companyId;
+      if (targetCompanyId && user?.companies) {
+        const targetComp = user.companies.find((c: any) => c.id === targetCompanyId);
+        if (targetComp && targetComp.role && user.role !== 'ADMIN') {
+          setUser((prev) => (prev ? { ...prev, role: targetComp.role! } : null));
+        }
+      }
+      fetchUser();
+    };
+
+    window.addEventListener('hrms:company-changed', handleCompanyChange);
+    return () => {
+      window.removeEventListener('hrms:company-changed', handleCompanyChange);
+    };
+  }, [user?.companies, user?.role]);
 
   const login = async (email: string, password: string) => {
     const data = await api.login({ email, password });
@@ -57,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setToken(data.token);
     setUser(data.user);
+    return data.user;
   };
 
   const logout = () => {
@@ -67,12 +93,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const isCompanyAdmin = user?.role === 'COMPANY_ADMIN';
-  const isCompanyHr = user?.role === 'COMPANY_HR' || user?.role === 'GROUP_HR';
-  const canAccessAllBrands = isSuperAdmin || isCompanyAdmin || isCompanyHr;
-  const canManageEmployees = isSuperAdmin || isCompanyAdmin || isCompanyHr || user?.role === 'BRAND_HR';
-  const canManageAttendance = isSuperAdmin || isCompanyAdmin || isCompanyHr || user?.role === 'BRAND_HR';
+  const isAdmin = user?.role === 'ADMIN';
+  const isHr = user?.role === 'HR';
+  const isAttendanceViewer = user?.role === 'ATTENDANCE_VIEWER';
+  const isSuperAdmin = isAdmin;
+  const isCompanyAdmin = isAdmin;
+  const canAccessAllBrands = isAdmin || (isHr && !user?.brandId);
+  const canManageEmployees = isAdmin || isHr;
+  const canManageAttendance = isAdmin || isHr;
+  const canManageCompanies = isAdmin;
+  const canManageHrUsers = isAdmin;
 
   return (
     <AuthContext.Provider
@@ -82,12 +112,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         logout,
+        refreshUser: fetchUser,
         isAuthenticated: !!user,
+        isAdmin,
+        isHr,
+        isAttendanceViewer,
         isSuperAdmin,
         isCompanyAdmin,
         canAccessAllBrands,
         canManageEmployees,
-        canManageAttendance
+        canManageAttendance,
+        canManageCompanies,
+        canManageHrUsers
       }}
     >
       {children}

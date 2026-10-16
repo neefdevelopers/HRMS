@@ -49,7 +49,7 @@ import {
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
-  const isSuperAdminOrGroupHr = user?.role === 'SUPER_ADMIN' || user?.role === 'GROUP_HR';
+  const isSuperAdminOrGroupHr = user?.role === 'ADMIN' || user?.role === 'HR';
 
   // Active section tab:
   // 1: company, 2: brands, 3: attendance, 4: leave, 5: shift, 6: payroll, 7: devices, 8: api
@@ -599,9 +599,6 @@ export const SettingsPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">System Settings</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure company profile, multi-brand records, attendance rules, leave policies, shifts, and payroll rules.
-          </p>
         </div>
 
         <button
@@ -678,9 +675,6 @@ export const SettingsPage: React.FC = () => {
                       <Building2 className="w-4 h-4 text-brand-600" />
                       <span>Company Profile & Branding</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Enter company identification details displayed on documents and system headers.
-                    </p>
                   </div>
 
                   <form onSubmit={handleSaveCompany} className="space-y-4 text-xs">
@@ -788,9 +782,6 @@ export const SettingsPage: React.FC = () => {
                         <Tag className="w-4 h-4 text-brand-600" />
                         <span>Brands Management</span>
                       </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Manage corporate brands integrated with employee profiles, shifts, and attendance records.
-                      </p>
                     </div>
 
                     <button
@@ -866,9 +857,6 @@ export const SettingsPage: React.FC = () => {
                       <Clock className="w-4 h-4 text-brand-600" />
                       <span>Attendance & Working Hour Rules</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Set daily expected hours, late arrival grace duration, half-day thresholds, and attendance rules.
-                    </p>
                   </div>
 
                   <form onSubmit={handleSaveAttendance} className="space-y-6 text-xs">
@@ -1247,9 +1235,6 @@ export const SettingsPage: React.FC = () => {
                       <Calendar className="w-4 h-4 text-brand-600" />
                       <span>Leave Policies & Allowances</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Configure company-wide carry-forward limits, accrual frequency, and manage leave types.
-                    </p>
                   </div>
 
                   {/* General Policy Rules Form */}
@@ -1447,9 +1432,6 @@ export const SettingsPage: React.FC = () => {
                       <CalendarRange className="w-4 h-4 text-brand-600" />
                       <span>Shift Rules & Timing Configuration</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Configure global shift defaults, break duration, and overnight shift handling.
-                    </p>
                   </div>
 
                   <form onSubmit={handleSaveShiftRules} className="space-y-4 text-xs">
@@ -1592,9 +1574,6 @@ export const SettingsPage: React.FC = () => {
                       <Banknote className="w-4 h-4 text-brand-600" />
                       <span>Payroll & Salary Calculation Settings</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Configure default overtime calculation rate multiplier, incomplete deductions, and cutoff day.
-                    </p>
                   </div>
 
                   <form onSubmit={handleSavePayroll} className="space-y-4 text-xs">
@@ -1785,9 +1764,6 @@ export const SettingsPage: React.FC = () => {
                         <Cpu className="w-4 h-4 text-brand-600" />
                         <span>Biometric & Punching Device Terminals</span>
                       </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Configure hardware attendance machines, network IPs, and connection health status.
-                      </p>
                     </div>
 
                     <button
@@ -1913,10 +1889,6 @@ export const SettingsPage: React.FC = () => {
                       <Key className="w-4 h-4 text-brand-600" />
                       <span>API & Integration Credentials</span>
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Configure biometric API sync gateways and email delivery credentials. All secret keys are masked
-                      and never exposed.
-                    </p>
                   </div>
 
                   <form onSubmit={handleSaveApi} className="space-y-6 text-xs">

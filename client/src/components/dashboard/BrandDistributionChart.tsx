@@ -22,7 +22,6 @@ export const BrandDistributionChart: React.FC<BrandDistributionProps> = ({
   return (
     <Card
       title="Brand-Wise Distribution"
-      subtitle="Employee headcount and proportion across group brands"
     >
       <div className="space-y-4">
         {distribution.length === 0 ? (

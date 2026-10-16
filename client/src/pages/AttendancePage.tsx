@@ -5,8 +5,9 @@ import { api } from '../services/api';
 import { Attendance, AttendanceStatus } from '../types';
 import { useBrand } from '../context/BrandContext';
 import { useAuth } from '../context/AuthContext';
-import { Cpu, RotateCw, Calendar as CalendarIcon, Clock, Search, Filter } from 'lucide-react';
+import { Cpu, RotateCw, Calendar as CalendarIcon, Clock, Search, Filter, CalendarCheck } from 'lucide-react';
 import { AttendanceTable } from '../components/dashboard/AttendanceTable';
+import { DailyLeavesSummary } from '../components/dashboard/DailyLeavesSummary';
 
 export const AttendancePage: React.FC = () => {
   const { selectedBrandId } = useBrand();
@@ -14,9 +15,32 @@ export const AttendancePage: React.FC = () => {
 
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [syncing, setSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'attendance' | 'rawPunches'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leaves' | 'rawPunches'>('attendance');
   const [rawPunches, setRawPunches] = useState<any[]>([]);
   const [loadingPunches, setLoadingPunches] = useState(false);
+  const [leaveSummaryCount, setLeaveSummaryCount] = useState<{ approved: number; pending: number }>({
+    approved: 0,
+    pending: 0
+  });
+
+  const loadLeaveCounts = async () => {
+    try {
+      const res = await api.getDailyLeaves({
+        date,
+        brandId: selectedBrandId !== 'all' ? selectedBrandId : undefined
+      });
+      setLeaveSummaryCount({
+        approved: res.summary.totalApproved,
+        pending: res.summary.totalPending
+      });
+    } catch {
+      // Non-blocking background fetch
+    }
+  };
+
+  useEffect(() => {
+    loadLeaveCounts();
+  }, [date, selectedBrandId]);
 
   const loadRawPunches = async () => {
     try {
@@ -56,9 +80,9 @@ export const AttendancePage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Attendance & Biometrics</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Attendance &amp; Biometrics</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitor daily punches, shift adherence, grace periods, and hardware synchronization.
+            Daily attendance records, biometric punch registry, and authorized employee leaves
           </p>
         </div>
 
@@ -88,10 +112,10 @@ export const AttendancePage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab('attendance')}
-          className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+          className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'attendance'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -99,9 +123,32 @@ export const AttendancePage: React.FC = () => {
         >
           Daily Attendance Records
         </button>
+
+        <button
+          onClick={() => setActiveTab('leaves')}
+          className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === 'leaves'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <CalendarCheck className="w-3.5 h-3.5" />
+          <span>Employees on Leave</span>
+          {leaveSummaryCount.approved > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+              {leaveSummaryCount.approved}
+            </span>
+          )}
+          {leaveSummaryCount.pending > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800" title="Pending HR approval">
+              {leaveSummaryCount.pending} pending
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => setActiveTab('rawPunches')}
-          className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors ${
+          className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'rawPunches'
               ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -113,10 +160,11 @@ export const AttendancePage: React.FC = () => {
 
       {activeTab === 'attendance' ? (
         <AttendanceTable selectedDate={date} selectedBrandId={selectedBrandId} />
+      ) : activeTab === 'leaves' ? (
+        <DailyLeavesSummary selectedDate={date} selectedBrandId={selectedBrandId} />
       ) : (
         <Card
           title="Raw Biometric Punch Registry"
-          subtitle="Direct hardware machine events with timestamp and deduplication checks"
           action={
             <button
               onClick={loadRawPunches}

@@ -2,57 +2,61 @@
 
 An enterprise-grade, **Multi-Company HRMS SaaS Application** built with **Node.js**, **Express**, **TypeScript**, **Prisma ORM**, **SQLite**, **React (Vite)**, and **Tailwind CSS**.
 
-Transformed from a single-group multi-brand HRMS into a multi-company SaaS platform where multiple independent companies operate on the same platform while keeping their records, settings, and operations strictly isolated.
+The system operates with **exactly three application roles**: **`ADMIN`**, **`HR`**, and **`ATTENDANCE_VIEWER`**. Multiple independent companies run on the platform while keeping their records, settings, and operations strictly isolated. Application access and permissions are strictly determined by explicit database company assignments (`CompanyMembership`).
 
 ---
 
-## 🏛️ Organizational Hierarchy
+## 🏛️ Three-Role Application Architecture
 
-The platform implements a strict 7-level multi-tenant hierarchy:
+| Application Role | Platform & Company Scope | Key Responsibilities & Capabilities |
+| :--- | :--- | :--- |
+| **`ADMIN`** | Platform-wide & All Companies | Registers, edits, activates, and deactivates companies; creates HR and Attendance Viewer accounts; provisions company assignments with company-specific roles; manages organizational structures (brands, branches, departments, designations); switches administrative workspace into any company; manages global and company-specific settings. |
+| **`HR`** | Strictly Assigned Companies | Operates daily HR workflows **only for explicitly assigned companies**; switches between assigned companies via header switcher; manages employee master records, biometric attendance, shifts, leave requests/approvals, salary processing, asset tracking, and exit clearance within authorized companies. |
+| **`ATTENDANCE_VIEWER`** | Strictly Assigned Companies (Attendance & Daily Leaves) | **Read-only access strictly limited to the Attendance module** of specifically assigned companies. Can view attendance dates, punch-in/out times, working hours, late arrivals, overtime, status indicators, raw biometric punch audits, and **daily employee leave information** (leave type, duration, full/half-day coverage, approval status, and operational remarks) for the selected date. Filter attendance and leaves by date, brand, branch, and status within the assigned company. **Forbidden from all other modules** (Dashboard, Employees, Leave Management, Payroll, Assets, Documents, Exits, Reports, Settings, Notifications), and blocked from manual punch addition, device synchronization, attendance corrections, and leave applications/approvals. |
 
-$$\text{Platform} \longrightarrow \text{Companies} \longrightarrow \text{Brands} \longrightarrow \text{Branches} \longrightarrow \text{Departments} \longrightarrow \text{Designations} \longrightarrow \text{Employees}$$
-
-* **Platform**: The top-level administrative layer managed by Platform Super Admins.
-* **Company**: An independent customer organization (tenant) using the HRMS with its own branding, brands, branches, staff, payroll, assets, and system settings.
-* **Brands & Branches**: Operational business divisions and physical work sites belonging to a specific company.
-* **Departments & Designations**: Functional business units and role titles within each company division.
-* **Employees**: Individual staff members bound strictly to their company scope.
+* **Zero Obsolete Roles:** The system strictly uses only `ADMIN`, `HR`, and `ATTENDANCE_VIEWER`. Obsolete roles like `EMPLOYEE` or `MANAGER` are not used as application logins.
+* **Employees are Records, Not Logins:** Employees are tracked as workforce records in the HR database.
+* **Company-Specific Role Assignment:** A user can hold different roles in different companies (e.g. User D is `HR` for Company A and `ATTENDANCE_VIEWER` for Company B). Role permissions are evaluated dynamically based on the active company context (`CompanyMembership.role`).
+* **Strict Single Navigation for Viewer:** When an Attendance Viewer logs in, they see only a single navigation item (`Attendance`). Direct URL navigation to restricted modules displays an Access Denied view.
+* **Immediate Revocation:** When an Admin removes a user's company membership or modifies their role, access updates immediately on the next request (403 Forbidden for unauthorized resources).
 
 ---
 
 ## 🚀 Key Modules & Capabilities
 
-### 1. SaaS Company Management (Platform Super Admin)
+### 1. SaaS Company Management (Admin Only)
 * **Company Registry (`/companies`)**: View all registered customer organizations with search by name, code, or email, and active/inactive status filters.
 * **Company Lifecycle**: Register new companies, edit contact and registration particulars, and activate/deactivate companies in real time.
-* **Tenant Overview**: Real-time drilldown inspecting company brand distribution, active employee headcount, connected punch terminals, active exit clearances, and assigned administrators.
-* **Administrator Provisioning**: Provision or assign dedicated Company Administrators directly to tenant companies.
-* **One-Click Workspace Switching**: Platform Super Admins can switch context seamlessly into any tenant company workspace directly from the navigation bar.
+* **Tenant Overview**: Real-time drilldown inspecting company brand distribution, active employee headcount, connected punch terminals, active exit clearances, and assigned HR members.
+* **One-Click Workspace Switching**: Admin users can switch context seamlessly into any company workspace directly from the navigation bar.
 
-### 2. Multi-Company Authentication & Tenant Switching
-* **Server-Validated Active Company**: Active company resolved from database memberships (`CompanyMembership`). Client headers (`X-Company-Id`) are validated on every request.
-* **Automatic vs. Manual Selection**: Single-company users are automatically routed to their organization. Multi-company users and Super Admins get an instant dropdown company switcher in the application header.
-* **Company Branding**: Header displays the active company badge alongside brand selectors.
+### 2. HR Management & Multi-Company Assignments (Admin Only)
+* **HR Directory (`/hr-management`)**: Admin-only control center listing all HR user accounts, account statuses, and current company assignment badges.
+* **HR Account Creation**: Provision new HR accounts with name, email, contact details, initial password, and searchable company multi-select.
+* **Dynamic Assignment Management**: Add or remove company assignments at any time without recreating the account.
+* **Immediate Access Revocation**: Removing an HR user's company membership immediately revokes workspace access and API permissions for that company.
 
-### 3. HR Dashboard & Operational Analytics
-* **Platform Super Admin View**: Consolidated platform overview showing total registered companies, active tenant distributions, and system-wide metrics.
-* **Company Admin & HR View**: Scoped workforce analytics including Total Active Headcount, Present Today, Absent, Late Arrivals, On Approved Leave, and New Joiners within their company.
-* **Brand-Level Filtering**: Multi-brand filtering scoped strictly to brands belonging to the active company.
+### 3. Multi-Company HR Workspace Switching
+* **Single-Company HR**: Automatically enters their assigned company workspace without manual selection prompts.
+* **Multi-Company HR**: Header dropdown allows seamless switching between explicitly assigned companies with complete cache invalidation.
+* **Unassigned HR**: Clear, friendly empty-state card ("Account Pending Company Assignment") explaining that an Administrator must assign them to a company, preventing crashes or blank screens.
+* **Server-Side Token Validation**: Every request validates membership against the current database state; client-supplied `X-Company-Id` headers are strictly verified.
 
 ### 4. Employee Master Directory & Profiles
 * **Company-Scoped Master**: Full employee lifecycle management isolated by company boundary.
 * **Scoped Business IDs**: Employee IDs (`EMP-XXXX`) and Biometric IDs (`BIO-XXXX`) are unique within each company (`@@unique([companyId, employeeId])`), allowing independent companies to use their own numbering schemes.
 * **360° Employee Profile**: Tabbed profile displaying personal details, shift assignments, real-time punch history, leave balances, payroll history, assigned assets, and uploaded compliance documents.
 
-### 5. Biometric Attendance Calculation Engine
+### 5. Biometric Attendance Calculation Engine & Daily Leaves
 * **Device Scoping**: Biometric terminals assigned to specific companies and branches to prevent cross-company punch ingestion.
 * **Hardware Sync Adapter**: Extensible `IPunchingDeviceAdapter` supporting real-time terminal sync and webhook ingestion.
 * **Smart Punch Deduplication**: Automatic 60-second duplicate punch deduplication.
 * **Automated Shift Logic**: Shift evaluations, configurable grace periods, half-day/full-day thresholds, night shifts, and overtime tracking.
+* **Daily Employee Leave Integration**: Attendance page includes a dedicated **Employees on Leave** tab and summary KPIs (Approved on Leave, Full-Day, Half-Day, Pending Review). Multi-day leaves display across all applicable dates, and approved leave records are cleanly distinguished from ordinary absences (`ON_LEAVE` / `HALF_DAY`). Fully accessible by Attendance Viewers without granting access to the Leave Management module.
 
 ### 6. Leaves & Approvals Workflow
 * **Company Leave Policies**: Configurable leave policies (Casual, Sick, Earned/Privilege) with annual allocations and carry-forward rules scoped by company.
-* **Approval Routing**: Two-tier review queue routing requests strictly to managers and HR personnel within the same company.
+* **Approval Routing**: Review queue routing requests strictly to authorized Admin and HR personnel within the same company.
 * **Instant Attendance Integration**: Approved leave updates daily attendance registers (`ON_LEAVE` / `HALF_DAY`).
 
 ### 7. Salary Processing, Receipts & Emailing
@@ -76,25 +80,23 @@ $$\text{Platform} \longrightarrow \text{Companies} \longrightarrow \text{Brands}
 * **Header Notification Bell**: Live unread count badge in the navbar with automatic 30-second polling.
 * **Tenant Scoping**: All notifications are bound to `companyId` and recipient `userId` to ensure zero cross-company information leakage.
 
-### 11. System Settings & Enterprise Integrations
-* **Platform vs. Company Settings**: Platform configuration separated from company-specific attendance rules, leave policies, shifts, and payroll settings.
-
 ---
 
-## 👥 Roles and Permissions
+## 👥 Pre-Configured Demo Accounts (3 Roles)
 
-The platform supports 6 user roles with predefined demo accounts (Default password: `password123`):
+The platform provides predefined demo accounts (Default password: `password123`):
 
-| Role | Email | Company | Scope & Permissions |
+| Role | Email | Company Assignments | Description / Use Case |
 | :--- | :--- | :--- | :--- |
-| **Platform Super Admin** | `superadmin@hrms.local` | Platform-wide | Manage all companies, view platform stats, switch company workspaces |
-| **Company Admin** | `admin@betalogistics.com` | Beta Logistics Inc. | Manage assigned company, brands, staff, settings, and users (Password: `BetaAdmin123!`) |
-| **Company HR** / **Group HR** | `grouphr@hrms.local` | Apex Group Enterprises | Manage employees, attendance, leave, salary, and exits across all company brands |
-| **Brand HR** | `apex.hr@hrms.local` | Apex Group Enterprises | Full HR operations for assigned brand (Apex Retail Group) |
-| **Manager** | `manager.apex@hrms.local` | Apex Group Enterprises | Team attendance, leave approvals, exit asset clearance for assigned team |
-| **Employee** | `employee.apex@hrms.local` | Apex Group Enterprises | Self-service attendance, leave requests, salary receipts, resignation |
+| **`ADMIN`** | `admin@hrms.local` | Platform-wide & All Companies | Full platform administration, company management, user provisioning, and role assignment. |
+| **`HR` (Single Company)** | `hr.apex@hrms.local` | Apex Group Enterprises only | Single-company HR operator. Auto-routes directly to Apex Group workspace; cannot access Beta Logistics. |
+| **`ATTENDANCE_VIEWER` (Beta)** | `viewer.a@hrms.local` | Beta Logistics Inc. only | Single-company Attendance Viewer. Read-only attendance for Beta Logistics; single navigation item; blocked from sync/corrections/other modules. |
+| **`ATTENDANCE_VIEWER` (Apex)** | `viewer.b@hrms.local` | Apex Group Enterprises only | Single-company Attendance Viewer for Apex Group. Cannot access Beta Logistics records. |
+| **`ATTENDANCE_VIEWER` (Multi)** | `viewer.multi@hrms.local` | Apex Group & Beta Logistics | Multi-company Attendance Viewer. Can switch between Apex and Beta; strictly read-only attendance in both companies. |
+| **`HYBRID` (HR + Viewer)** | `hybrid.user@hrms.local` | HR in Beta Logistics, Viewer in Apex Group | Demonstrates company-specific roles: full HR capabilities when active company is Beta, and strictly read-only attendance when active company is Apex! |
+| **`HR` (Unassigned)** | `hr.unassigned@hrms.local` | None (0 companies) | Demonstrates graceful empty state informing user to contact Admin for assignments. |
 
-*Note: One-click demo login buttons are available on the login page for instant testing of roles.*
+*Quick-access demo buttons for all accounts are available directly on the login page.*
 
 ---
 
@@ -176,7 +178,11 @@ Navigate to **`http://localhost:5173`** in your browser. Use any of the pre-conf
 | | `GET` | `/api/companies/:id/overview` | Detailed tenant overview & admin list |
 | | `PUT` | `/api/companies/:id` | Update company information |
 | | `PATCH`| `/api/companies/:id/status` | Activate or deactivate company |
-| | `POST` | `/api/companies/:id/admins` | Assign/invite company administrator |
+| **HR Management** | `GET` | `/api/hr-management` | List all HR users with company assignment details (Admin only) |
+| | `POST` | `/api/hr-management` | Create HR account with multi-company assignments (Admin only) |
+| | `PUT` | `/api/hr-management/:userId/companies` | Update HR user company assignments (Admin only) |
+| | `PATCH`| `/api/hr-management/:userId` | Update HR account status or details (Admin only) |
+| | `GET` | `/api/companies/:companyId/hr-users` | View HR users assigned to a company (Admin only) |
 | **Dashboard** | `GET` | `/api/dashboard/metrics` | Fetch aggregated KPI cards & charts |
 | **Employees** | `GET` | `/api/employees` | List employees (paginated, brand-scoped) |
 | | `POST` | `/api/employees` | Create new employee profile |
@@ -201,10 +207,13 @@ Navigate to **`http://localhost:5173`** in your browser. Use any of the pre-conf
 | | `POST` | `/api/exit/:id/assets/:assetId/clear` | Clear assigned company device |
 | | `POST` | `/api/exit/:id/relieving-letter/issue` | Generate PDF relieving letter & archive |
 | | `POST` | `/api/exit/:id/complete` | Complete exit & mark employee inactive |
-| **Notifications** | `GET` | `/api/notifications` | Paginated user notifications |
-| | `GET` | `/api/notifications/unread-count` | Real-time unread badge count |
-| | `PATCH`| `/api/notifications/:id/read` | Mark individual notification read |
-| | `PATCH`| `/api/notifications/read-all` | Mark all notifications read |
+| **Notifications** | `GET` | `/api/notifications` | Paginated notifications with company scoping, search, and type filters |
+| | `GET` | `/api/notifications/unread-count` | Real-time unread badge count scoped by active company |
+| | `PATCH`| `/api/notifications/:id/read` | Mark individual notification as read |
+| | `PATCH`| `/api/notifications/:id/unread` | Toggle individual notification back to unread |
+| | `PATCH`| `/api/notifications/read-all` | Mark all notifications read (optionally scoped by company) |
+| | `DELETE`| `/api/notifications/:id` | Delete individual notification |
+| | `DELETE`| `/api/notifications/clear-read` | Batch delete all read notifications (scoped by company) |
 
 ---
 

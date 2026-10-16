@@ -23,7 +23,6 @@ export const RecentJoinersList: React.FC<RecentJoinersProps> = ({ joiners }) => 
   return (
     <Card
       title="New Joiners"
-      subtitle="Recently onboarded team members"
       action={
         <button
           onClick={() => navigate('/employees')}

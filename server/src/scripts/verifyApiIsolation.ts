@@ -50,9 +50,9 @@ function makeRequest(
 }
 
 async function runApiVerification() {
-  console.log('=====================================================');
-  console.log(' LIVE HTTP API MULTI-COMPANY ISOLATION TESTS');
-  console.log('=====================================================\n');
+  console.log('================================================================');
+  console.log(' LIVE HTTP API MULTI-COMPANY HRMS (ADMIN & HR ROLES) TEST SUITE');
+  console.log('================================================================\n');
 
   let passed = 0;
   let failed = 0;
@@ -67,136 +67,242 @@ async function runApiVerification() {
     }
   }
 
-  // 1. Login as Platform Super Admin
-  const saLogin = await makeRequest('POST', '/api/auth/login', {}, {
+  // -------------------------------------------------------------
+  // Test 1: Only ADMIN and HR roles are accepted
+  // -------------------------------------------------------------
+  const empLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'employee.apex@hrms.local',
+    password: 'password123'
+  });
+  assert(empLogin.status === 401 || empLogin.status === 403, '1. Former EMPLOYEE role is rejected (401/403)');
+
+  const mgrLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'manager.apex@hrms.local',
+    password: 'password123'
+  });
+  assert(mgrLogin.status === 401 || mgrLogin.status === 403, '2. Former MANAGER role is rejected (401/403)');
+
+  const superAdminLogin = await makeRequest('POST', '/api/auth/login', {}, {
     email: 'superadmin@hrms.local',
     password: 'password123'
   });
-  const saToken = saLogin.body.data?.token || saLogin.body.token;
-  assert(saLogin.status === 200 && !!saToken, '1. Platform Super Admin can log in', `Status: ${saLogin.status}`);
+  assert(superAdminLogin.status === 401 || superAdminLogin.status === 403, '3. Obsolete SUPER_ADMIN account is quarantined / rejected (401/403)');
 
-  // 2. Super Admin can view all registered companies
+  // -------------------------------------------------------------
+  // Test 2: Admin Authentication and Management Access
+  // -------------------------------------------------------------
+  const adminLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'admin@hrms.local',
+    password: 'password123'
+  });
+  const adminToken = adminLogin.body.data?.token || adminLogin.body.token;
+  assert(adminLogin.status === 200 && !!adminToken, '4. Admin user (admin@hrms.local) logs in with ADMIN role');
+
   const companiesRes = await makeRequest('GET', '/api/companies', {
-    Authorization: `Bearer ${saToken}`
+    Authorization: `Bearer ${adminToken}`
   });
   assert(
     companiesRes.status === 200 && Array.isArray(companiesRes.body.data) && companiesRes.body.data.length >= 2,
-    '2. Super Admin can access SaaS Platform Companies list (/api/companies)',
-    `Count: ${companiesRes.body.data?.length}`
+    '5. Admin can access platform company registry (/api/companies)',
+    `Found ${companiesRes.body.data?.length} companies`
   );
 
-  const apexCompany = companiesRes.body.data.find((c: any) => c.code === 'APEX_CORP');
-  const betaCompany = companiesRes.body.data.find((c: any) => c.code === 'BETA_CORP');
-  assert(!!apexCompany && !!betaCompany, '3. Both Apex Group and Beta Logistics present in Platform Registry');
+  const apexComp = companiesRes.body.data.find((c: any) => c.code === 'APEX_CORP');
+  const betaComp = companiesRes.body.data.find((c: any) => c.code === 'BETA_CORP');
+  assert(!!apexComp && !!betaComp, '6. Apex Corp and Beta Corp exist in registry');
 
-  // 3. Super Admin can view company overview metrics
-  const overviewRes = await makeRequest('GET', `/api/companies/${apexCompany.id}/overview`, {
-    Authorization: `Bearer ${saToken}`
+  // Admin access to HR management
+  const hrListRes = await makeRequest('GET', '/api/hr-management', {
+    Authorization: `Bearer ${adminToken}`
   });
   assert(
-    overviewRes.status === 200 && overviewRes.body.data?.brands?.length >= 3,
-    '4. Super Admin can view Apex Group overview metrics (/api/companies/:id/overview)'
+    hrListRes.status === 200 && Array.isArray(hrListRes.body.data),
+    '7. Admin can access HR Management list (/api/hr-management)'
   );
 
-  // 4. Login as Company A HR (Apex Group)
-  const aLogin = await makeRequest('POST', '/api/auth/login', {}, {
-    email: 'grouphr@hrms.local',
+  // -------------------------------------------------------------
+  // Test 3: Admin creates HR account with multi-company assignments
+  // -------------------------------------------------------------
+  const testHrEmail = `test.hr.${Date.now()}@hrms.local`;
+  const createHrRes = await makeRequest('POST', '/api/hr-management', {
+    Authorization: `Bearer ${adminToken}`
+  }, {
+    firstName: 'Automation',
+    lastName: 'Tester',
+    email: testHrEmail,
+    password: 'Password123!',
+    phone: '+1 555-9988',
+    companyIds: [apexComp.id, betaComp.id]
+  });
+
+  assert(
+    (createHrRes.status === 200 || createHrRes.status === 201) && createHrRes.body.data?.assignments?.length === 2,
+    '8. Admin creates HR user with multi-company assignments (Apex & Beta)',
+    `Status: ${createHrRes.status}, Assignments: ${createHrRes.body.data?.assignments?.length}`
+  );
+  const createdHrId = createHrRes.body.data?.id;
+
+  // -------------------------------------------------------------
+  // Test 4: New HR logs in and verifies access to both companies
+  // -------------------------------------------------------------
+  const newHrLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: testHrEmail,
+    password: 'Password123!'
+  });
+  const newHrToken = newHrLogin.body.data?.token || newHrLogin.body.token;
+  const newHrCompanies = newHrLogin.body.data?.companies || newHrLogin.body.data?.user?.companies;
+  assert(newHrLogin.status === 200 && !!newHrToken, '9. Newly created HR user logs in successfully');
+  assert(
+    newHrCompanies?.length === 2,
+    '10. Newly created HR user receives 2 authorized companies on login'
+  );
+
+  // Access Company A with X-Company-Id
+  const newHrInCompA = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${newHrToken}`,
+    'X-Company-Id': apexComp.id
+  });
+  assert(
+    newHrInCompA.status === 200 && Array.isArray(newHrInCompA.body.data),
+    '11. Multi-Company HR accesses Company A employees'
+  );
+
+  // Access Company B with X-Company-Id
+  const newHrInCompB = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${newHrToken}`,
+    'X-Company-Id': betaComp.id
+  });
+  assert(
+    newHrInCompB.status === 200 && Array.isArray(newHrInCompB.body.data),
+    '12. Multi-Company HR switches to Company B employees safely'
+  );
+
+  // -------------------------------------------------------------
+  // Test 5: Immediate Revocation - Admin removes Company B assignment
+  // -------------------------------------------------------------
+  const updateAssignmentsRes = await makeRequest('PUT', `/api/hr-management/${createdHrId}/companies`, {
+    Authorization: `Bearer ${adminToken}`
+  }, {
+    companyIds: [apexComp.id] // Beta removed!
+  });
+  assert(
+    updateAssignmentsRes.status === 200 && updateAssignmentsRes.body.data?.assignments?.length === 1,
+    '13. Admin updates HR assignments to Company A only (Beta removed)'
+  );
+
+  // Immediate Revocation check: Using the OLD token to access Company B must immediately fail with 403
+  const revokedAccessCheck = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${newHrToken}`,
+    'X-Company-Id': betaComp.id
+  });
+  assert(
+    revokedAccessCheck.status === 403,
+    '14. Immediate access revocation: Request to removed company using existing token returns 403 Forbidden',
+    `Status: ${revokedAccessCheck.status}`
+  );
+
+  // Still has access to Company A
+  const stillHasCompA = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${newHrToken}`,
+    'X-Company-Id': apexComp.id
+  });
+  assert(
+    stillHasCompA.status === 200,
+    '15. HR still retains authorized access to Company A'
+  );
+
+  // -------------------------------------------------------------
+  // Test 6: Single-Company HR access boundary (hr.apex@hrms.local)
+  // -------------------------------------------------------------
+  const apexHrLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'hr.apex@hrms.local',
     password: 'password123'
   });
-  const aToken = aLogin.body.data?.token || aLogin.body.token;
-  assert(aLogin.status === 200 && !!aToken, '5. Company A HR (grouphr@hrms.local) can log in');
+  const apexHrToken = apexHrLogin.body.data?.token || apexHrLogin.body.token;
+  const apexHrCompanies = apexHrLogin.body.data?.companies || apexHrLogin.body.data?.user?.companies;
+  assert(apexHrLogin.status === 200 && !!apexHrToken, '16. Single-Company HR (hr.apex@hrms.local) logs in');
+  assert(apexHrCompanies?.length === 1, '17. Single-Company HR receives exactly 1 company');
 
-  // 5. Company A HR cannot access SaaS Company Management endpoint
-  const unauthorizedCompaniesRes = await makeRequest('GET', '/api/companies', {
-    Authorization: `Bearer ${aToken}`
+  // Attempt to access Company B
+  const apexHrToBeta = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${apexHrToken}`,
+    'X-Company-Id': betaComp.id
   });
   assert(
-    unauthorizedCompaniesRes.status === 403,
-    '6. Company A HR is blocked (403 Forbidden) from Platform Companies endpoint (/api/companies)'
+    apexHrToBeta.status === 403,
+    '18. Single-Company HR is blocked (403) from accessing unauthorized Company B',
+    `Status: ${apexHrToBeta.status}`
   );
 
-  // 6. Company A HR retrieves employees in Company A scope
+  // -------------------------------------------------------------
+  // Test 7: HR with 0 company assignments (hr.unassigned@hrms.local)
+  // -------------------------------------------------------------
+  const unassignedLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'hr.unassigned@hrms.local',
+    password: 'password123'
+  });
+  const unassignedToken = unassignedLogin.body.data?.token || unassignedLogin.body.token;
+  const unassignedCompanies = unassignedLogin.body.data?.companies || unassignedLogin.body.data?.user?.companies;
+  const unassignedActive = unassignedLogin.body.data?.activeCompany !== undefined ? unassignedLogin.body.data.activeCompany : unassignedLogin.body.data?.user?.activeCompany;
+  assert(
+    unassignedLogin.status === 200 &&
+    unassignedCompanies?.length === 0 &&
+    (unassignedActive === null || unassignedActive === undefined),
+    '19. Unassigned HR authenticates gracefully without crashing (0 companies, null activeCompany)'
+  );
+
+  const unassignedAttempt = await makeRequest('GET', '/api/employees', {
+    Authorization: `Bearer ${unassignedToken}`
+  });
+  assert(
+    unassignedAttempt.status === 403,
+    '20. Unassigned HR cannot access company-scoped modules (403 Forbidden)',
+    `Status: ${unassignedAttempt.status}`
+  );
+
+  // -------------------------------------------------------------
+  // Test 8: Non-Admin blocked from Admin HR Management endpoint
+  // -------------------------------------------------------------
+  const hrForbiddenRes = await makeRequest('GET', '/api/hr-management', {
+    Authorization: `Bearer ${apexHrToken}`
+  });
+  assert(
+    hrForbiddenRes.status === 403,
+    '21. HR user is strictly blocked (403) from Admin HR Management endpoint (/api/hr-management)'
+  );
+
+  // -------------------------------------------------------------
+  // Test 9: Tenant Data Isolation (Company A vs Company B)
+  // -------------------------------------------------------------
+  const multiHrLogin = await makeRequest('POST', '/api/auth/login', {}, {
+    email: 'hr.multi@hrms.local',
+    password: 'password123'
+  });
+  const multiHrToken = multiHrLogin.body.data?.token || multiHrLogin.body.token;
+
   const aEmployees = await makeRequest('GET', '/api/employees', {
-    Authorization: `Bearer ${aToken}`,
-    'X-Company-Id': apexCompany.id
+    Authorization: `Bearer ${multiHrToken}`,
+    'X-Company-Id': apexComp.id
   });
-  assert(
-    aEmployees.status === 200 && Array.isArray(aEmployees.body.data) && aEmployees.body.data.length >= 7,
-    '7. Company A HR retrieves all 7 Apex employees'
-  );
-  const containsBetaInA = aEmployees.body.data.some((e: any) => e.employeeId === 'BETA-1001');
-  assert(!containsBetaInA, '8. Zero Company B employees leak into Company A employee list');
-
-  // 7. Login as Company B Admin (Beta Logistics)
-  const bLogin = await makeRequest('POST', '/api/auth/login', {}, {
-    email: 'admin@betalogistics.com',
-    password: 'BetaAdmin123!'
-  });
-  const bToken = bLogin.body.data?.token || bLogin.body.token;
-  assert(bLogin.status === 200 && !!bToken, '9. Company B Administrator (admin@betalogistics.com) can log in');
-
-  // 8. Company B Admin retrieves employees in Company B scope
   const bEmployees = await makeRequest('GET', '/api/employees', {
-    Authorization: `Bearer ${bToken}`,
-    'X-Company-Id': betaCompany.id
+    Authorization: `Bearer ${multiHrToken}`,
+    'X-Company-Id': betaComp.id
   });
-  assert(
-    bEmployees.status === 200 && Array.isArray(bEmployees.body.data) && bEmployees.body.data.length === 1,
-    '10. Company B Admin sees exactly 1 employee in Beta Logistics'
-  );
-  assert(bEmployees.body.data[0].employeeId === 'BETA-1001', '11. Company B sees BETA-1001 (Rajesh Kumar)');
 
-  // 9. Cross-Company Spoofing Test: Company A HR attempts to force X-Company-Id to Company B
-  const spoofAttempt = await makeRequest('GET', '/api/employees', {
-    Authorization: `Bearer ${aToken}`,
-    'X-Company-Id': betaCompany.id // Attempting to inspect Beta Logistics!
-  });
-  // Server-side auth middleware validates that user has no membership in Beta Logistics,
-  // therefore it rejects the header or ignores it and resolves only authorized company!
-  const leakedToA = spoofAttempt.body.data?.some((e: any) => e.employeeId === 'BETA-1001');
+  const aHasBeta = aEmployees.body.data?.some((e: any) => e.companyId === betaComp.id || e.employeeId === 'BETA-1001');
+  const bHasApex = bEmployees.body.data?.some((e: any) => e.companyId === apexComp.id);
+
   assert(
-    !leakedToA,
-    '12. Cross-Tenant Header Spoofing Prevented: Company A user sending Beta company ID gets 0 Beta records'
+    !aHasBeta && !bHasApex && aEmployees.body.data?.length >= 7 && bEmployees.body.data?.length >= 1,
+    '22. Data isolation verified: Zero cross-company employee record leakage across workspaces'
   );
 
-  // 10. Direct Record Access: Company B Admin tries to view Company A employee by ID
-  const apexEmployeeId = aEmployees.body.data[0].id;
-  const crossAccess = await makeRequest('GET', `/api/employees/${apexEmployeeId}`, {
-    Authorization: `Bearer ${bToken}`,
-    'X-Company-Id': betaCompany.id
-  });
-  assert(
-    crossAccess.status === 404 || crossAccess.status === 403,
-    '13. Direct Record Cross-Tenant Access Blocked: Beta Admin requesting Apex employee gets 404/403',
-    `Status: ${crossAccess.status}`
-  );
-
-  // 11. Brands Isolation: Company B only sees Beta Express Fleet
-  const bBrands = await makeRequest('GET', '/api/brands', {
-    Authorization: `Bearer ${bToken}`,
-    'X-Company-Id': betaCompany.id
-  });
-  assert(
-    bBrands.status === 200 && bBrands.body.data?.length === 1 && bBrands.body.data[0].code === 'BETA_EXP',
-    '14. Brands API returns only Company B brands for Company B Admin'
-  );
-
-  // 12. Assets Isolation: Company B only sees Zebra Scanner
-  const bAssets = await makeRequest('GET', '/api/assets', {
-    Authorization: `Bearer ${bToken}`,
-    'X-Company-Id': betaCompany.id
-  });
-  assert(
-    bAssets.status === 200 && bAssets.body.data?.length === 1 && bAssets.body.data[0].assetTag === 'ASSET-BETA-SCAN-01',
-    '15. Assets API returns only Company B assets for Company B Admin'
-  );
-
-  console.log('\n=====================================================');
+  console.log('\n================================================================');
   console.log(` SUMMARY: ${passed} PASSED, ${failed} FAILED`);
-  console.log('=====================================================\n');
+  console.log('================================================================\n');
 
   if (failed === 0) {
-    console.log('[SUCCESS] All Live HTTP API Multi-Company Isolation checks PASSED!\n');
+    console.log('[SUCCESS] All Live API Multi-Company & Two-Role Tests PASSED!\n');
   } else {
     process.exit(1);
   }

@@ -30,6 +30,46 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
       where.date = { gte: startDate, lte: endDate };
     } else {
       where.date = date;
+
+      // Automatically sync approved leaves covering this date so they display as ON_LEAVE rather than ordinary absence
+      try {
+        const approvedLeaves = await prisma.leaveRequest.findMany({
+          where: {
+            status: 'APPROVED',
+            startDate: { lte: date },
+            endDate: { gte: date },
+            ...(effectiveCompanyId ? { brand: { companyId: effectiveCompanyId } } : {})
+          },
+          include: { employee: true }
+        });
+
+        for (const al of approvedLeaves) {
+          await prisma.attendance.upsert({
+            where: {
+              employeeId_date: {
+                employeeId: al.employeeId,
+                date
+              }
+            },
+            update: {
+              status: al.isHalfDay ? 'HALF_DAY' : 'ON_LEAVE'
+            },
+            create: {
+              companyId: al.companyId || al.employee.companyId,
+              employeeId: al.employeeId,
+              brandId: al.brandId || al.employee.brandId,
+              branchId: al.employee.branchId,
+              shiftId: al.employee.shiftId,
+              date,
+              status: al.isHalfDay ? 'HALF_DAY' : 'ON_LEAVE',
+              workingHours: 0.0
+            }
+          });
+        }
+      } catch (leaveSyncErr) {
+        // Non-blocking log if attendance upsert hits any constraint
+        console.error('[AttendanceController] Approved leave sync error:', leaveSyncErr);
+      }
     }
 
     // Company isolation
@@ -40,21 +80,11 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
     // Brand filtering & role-based scoping
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        where.brandId = req.user.brandId;
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
-    // Role scoping: Employee only sees their own attendance
-    if (req.user?.role === Role.EMPLOYEE && req.user.employeeId) {
-      where.employeeId = req.user.employeeId;
-    } else if (employeeId) {
+    if (employeeId) {
       where.employeeId = employeeId;
     }
 
@@ -176,21 +206,22 @@ export const manualCorrection = async (req: AuthenticatedRequest, res: Response)
       }
     });
 
-    // Notify employee of attendance correction
+    // Notify authorized HR & Admin of the company
     try {
-      const empUserId = await notificationService.getUserIdByEmployeeId(existing.employeeId);
-      if (empUserId && empUserId !== req.user?.id) {
-        await notificationService.createNotification({
-          userId: empUserId,
+      const hrUserIds = await notificationService.getHrUserIdsForBrand(existing.brandId);
+      await notificationService.notifyUsers(
+        hrUserIds.filter((uid) => uid !== req.user?.id),
+        {
+          companyId: existing.employee.companyId,
           title: 'Attendance Adjusted',
-          message: `Your attendance record for ${existing.date} was adjusted (${updated.status}, ${updated.workingHours}h).`,
+          message: `Attendance record for ${existing.employee.firstName} ${existing.employee.lastName} on ${existing.date} was adjusted (${updated.status}, ${updated.workingHours}h).`,
           type: 'ATTENDANCE',
           module: 'attendance',
           recordId: id,
           actionUrl: '/attendance',
-          eventKey: `att-adjust-${id}-${Date.now()}`
-        });
-      }
+          eventKeyPrefix: `att-adjust-${id}-${Date.now()}`
+        }
+      );
     } catch (notifErr: any) {
       console.error('[AttendanceController] Notification error on manualCorrection:', notifErr.message);
     }
@@ -241,5 +272,122 @@ export const getPunches = async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to fetch punches', 500);
+  }
+};
+
+/**
+ * Get daily employee leave information for a selected date.
+ * Read-only endpoint accessible by ADMIN, HR, and ATTENDANCE_VIEWER.
+ * Returns only operational leave details necessary for attendance verification.
+ */
+export const getDailyLeaves = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const brandId = (req.query.brandId as string) || req.effectiveBrandId;
+    const branchId = req.query.branchId as string;
+    const status = req.query.status as string; // Optional: ALL, APPROVED, PENDING, REJECTED
+    const effectiveCompanyId = req.effectiveCompanyId;
+
+    const baseWhere: any = {
+      startDate: { lte: date },
+      endDate: { gte: date }
+    };
+
+    // Strict Company Isolation
+    if (effectiveCompanyId) {
+      baseWhere.brand = { companyId: effectiveCompanyId };
+    }
+
+    // Brand Scoping
+    if (brandId && brandId !== 'all') {
+      baseWhere.brandId = brandId;
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      baseWhere.brandId = req.user.brandId;
+    }
+
+    // Branch Scoping
+    if (branchId) {
+      baseWhere.employee = { ...(baseWhere.employee || {}), branchId };
+    }
+
+    // Filtered where clause for returned list
+    const listWhere: any = { ...baseWhere };
+    if (status && status !== 'ALL') {
+      listWhere.status = status;
+    }
+
+    // Fetch matching leave requests with strictly necessary fields
+    const leaves = await prisma.leaveRequest.findMany({
+      where: listWhere,
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        isHalfDay: true,
+        halfDayType: true,
+        reason: true,
+        status: true,
+        rejectionReason: true,
+        appliedAt: true,
+        reviewedAt: true,
+        employee: {
+          select: {
+            id: true,
+            employeeId: true,
+            firstName: true,
+            lastName: true,
+            department: { select: { id: true, name: true } },
+            designation: { select: { id: true, title: true } },
+            branch: { select: { id: true, name: true } }
+          }
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        leaveType: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            isPaid: true
+          }
+        }
+      },
+      orderBy: [
+        { status: 'asc' }, // APPROVED first, then PENDING, then REJECTED
+        { startDate: 'asc' }
+      ]
+    });
+
+    // Compute summary metrics for all leaves covering this date
+    const allOnDate = await prisma.leaveRequest.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        status: true,
+        isHalfDay: true
+      }
+    });
+
+    const summary = {
+      totalApproved: allOnDate.filter((l) => l.status === 'APPROVED').length,
+      fullDayApproved: allOnDate.filter((l) => l.status === 'APPROVED' && !l.isHalfDay).length,
+      halfDayApproved: allOnDate.filter((l) => l.status === 'APPROVED' && l.isHalfDay).length,
+      totalPending: allOnDate.filter((l) => l.status === 'PENDING').length,
+      totalRejected: allOnDate.filter((l) => l.status === 'REJECTED').length,
+      totalRecords: allOnDate.length
+    };
+
+    return sendSuccess(res, {
+      date,
+      summary,
+      leaves
+    });
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to fetch daily leaves', 500);
   }
 };

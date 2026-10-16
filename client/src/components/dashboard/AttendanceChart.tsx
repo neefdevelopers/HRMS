@@ -43,7 +43,6 @@ export const AttendanceChart: React.FC<AttendanceChartProps> = ({ distribution, 
   return (
     <Card
       title="Attendance Overview & Trends"
-      subtitle="Workforce presence, punctuality, and weekly trajectory"
       action={
         <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
           <button

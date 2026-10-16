@@ -22,15 +22,8 @@ export const getAttendanceReport = async (req: AuthenticatedRequest, res: Respon
 
     if (brandId && brandId !== 'all') {
       where.brandId = brandId;
-    } else if (
-      req.user?.role !== Role.SUPER_ADMIN &&
-      req.user?.role !== Role.COMPANY_ADMIN &&
-      req.user?.role !== Role.COMPANY_HR &&
-      req.user?.role !== Role.GROUP_HR
-    ) {
-      if (req.user?.brandId) {
-        where.brandId = req.user.brandId;
-      }
+    } else if (req.user?.role === Role.HR && req.user?.brandId) {
+      where.brandId = req.user.brandId;
     }
 
     const records = await prisma.attendance.findMany({

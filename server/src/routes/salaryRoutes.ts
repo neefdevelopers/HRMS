@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { authorizeRoles, enforceBrandAccess, Role } from '../middleware/rbac.js';
+import { authorizeRoles, enforceBrandAccess, enforceCompanyAccess, Role } from '../middleware/rbac.js';
 import {
   getSalaryOverview,
   calculateSingleSalary,
@@ -31,140 +31,138 @@ import {
 
 const router = Router();
 
-// All salary routes require authentication
+// All salary routes require authentication and company context
 router.use(authenticate);
+router.use(enforceCompanyAccess);
+router.use(authorizeRoles(Role.ADMIN, Role.HR));
 
 // 0. Simplified Salary Module Core Routes
 router.get(
   '/overview',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getSalaryOverview
 );
 
 router.post(
   '/calculate-single',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   calculateSingleSalary
 );
 
-// 1. Employee self-service
-router.get('/my-receipts', getMyReceipts);
-router.get('/my-receipts/:id/pdf', downloadReceiptPdf);
-
-// 2. Dashboard
+// 1. Dashboard
 router.get(
   '/dashboard',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getSalaryDashboard
 );
 
-// 3. Configurations
+// 2. Configurations
 router.get(
   '/configs',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getSalaryConfigs
 );
 
 router.get(
   '/configs/:employeeId',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   getEmployeeSalaryConfigHistory
 );
 
 router.post(
   '/configs',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   saveSalaryConfig
 );
 
-// 4. Incentives & Adjustments
+// 3. Incentives & Adjustments
 router.get(
   '/incentives',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getIncentives
 );
 
 router.post(
   '/incentives',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   createIncentive
 );
 
 router.patch(
   '/incentives/:id/status',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   updateIncentiveStatus
 );
 
 router.get(
   '/adjustments',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getAdjustments
 );
 
 router.post(
   '/adjustments',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   createAdjustment
 );
 
-// 5. Overtime Management & Calculation
+// 4. Overtime Management & Calculation
 router.get(
   '/overtime',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getOvertimeRecords
 );
 
 router.post(
   '/overtime',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   createOvertimeRecord
 );
 
 router.patch(
   '/overtime/:id/status',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   updateOvertimeStatus
 );
 
-// 6. Monthly Salary Processing
+// 5. Monthly Salary Processing
 router.post(
   '/process',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   processMonthlySalary
 );
 
 router.get(
   '/payrolls',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getPayrolls
 );
 
 router.get(
   '/payrolls/:id',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   getPayrollById
 );
 
 router.patch(
   '/payrolls/:id',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   updatePayrollReview
 );
 
 router.post(
   '/finalize',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   finalizePayroll
 );
@@ -172,32 +170,32 @@ router.post(
 // 6. Receipts & PDF Generation
 router.get(
   '/receipts',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   enforceBrandAccess,
   getReceipts
 );
 
 router.get(
   '/receipts/:id',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   getReceiptById
 );
 
 router.get(
   '/receipts/:id/pdf',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER, Role.EMPLOYEE),
+  authorizeRoles(Role.ADMIN, Role.HR),
   downloadReceiptPdf
 );
 
 router.post(
   '/send-receipt-mail',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   sendSalaryReceiptMailHandler
 );
 
 router.post(
   '/prepare-receipt',
-  authorizeRoles(Role.SUPER_ADMIN, Role.GROUP_HR, Role.BRAND_HR, Role.MANAGER),
+  authorizeRoles(Role.ADMIN, Role.HR),
   prepareSalaryReceiptHandler
 );
 

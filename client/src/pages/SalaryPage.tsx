@@ -83,7 +83,7 @@ export const SalaryPage: React.FC = () => {
   const { user } = useAuth();
   const { selectedBrandId } = useBrand();
 
-  const canManageSalary = ['SUPER_ADMIN', 'GROUP_HR', 'BRAND_HR'].includes(user?.role || '');
+  const canManageSalary = user?.role === 'ADMIN' || user?.role === 'HR';
 
   // Month selection: YYYY-MM (default to current month e.g. 2026-10)
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
@@ -345,9 +345,6 @@ export const SalaryPage: React.FC = () => {
             <Banknote className="w-5 h-5 text-emerald-600" />
             Salary Module
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Simple monthly salary processing with automatic overtime, incomplete working hours, and optional incentives.
-          </p>
         </div>
 
         {/* Month Selector & Main Actions */}
