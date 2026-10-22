@@ -19,7 +19,6 @@ export const login = async (req: Request, res: Response) => {
       where: { email },
       include: {
         brand: true,
-        branch: true,
         employee: {
           include: {
             department: true,
@@ -91,7 +90,6 @@ export const login = async (req: Request, res: Response) => {
       email: user.email,
       role: user.role,
       brandId: user.brandId,
-      branchId: user.branchId,
       employeeId: user.employeeId
     });
 
@@ -119,10 +117,8 @@ export const login = async (req: Request, res: Response) => {
       activeCompany,
       companies,
       brandId: user.brandId,
-      branchId: user.branchId,
       employeeId: user.employeeId,
       brand: user.brand,
-      branch: user.branch,
       employee: user.employee
     };
 
@@ -145,7 +141,6 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
       where: { id: req.user.id },
       include: {
         brand: true,
-        branch: true,
         employee: {
           include: {
             department: true,
@@ -202,10 +197,8 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
       activeCompany,
       companies,
       brandId: user.brandId,
-      branchId: user.branchId,
       employeeId: user.employeeId,
       brand: user.brand,
-      branch: user.branch,
       employee: user.employee
     };
 

@@ -93,7 +93,6 @@ export const getCompanyById = async (req: AuthenticatedRequest, res: Response) =
             isActive: true,
             _count: {
               select: {
-                branches: true,
                 employees: true
               }
             }
@@ -372,7 +371,7 @@ export const getCompanyOverview = async (req: AuthenticatedRequest, res: Respons
       include: {
         brands: {
           include: {
-            _count: { select: { branches: true, employees: true } }
+            _count: { select: { employees: true } }
           }
         },
         memberships: {

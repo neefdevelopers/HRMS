@@ -7,7 +7,6 @@ import { api } from '../services/api';
 import {
   Employee,
   Brand,
-  Branch,
   Department,
   Designation,
   Shift,
@@ -42,7 +41,8 @@ import {
   Check,
   RefreshCw,
   FileCheck2,
-  CalendarDays
+  CalendarDays,
+  X
 } from 'lucide-react';
 
 export const EmployeesPage: React.FC = () => {
@@ -71,7 +71,6 @@ export const EmployeesPage: React.FC = () => {
 
   // Form options
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -85,7 +84,6 @@ export const EmployeesPage: React.FC = () => {
     email: '',
     phone: '',
     brandId: '',
-    branchId: '',
     departmentId: '',
     designationId: '',
     shiftId: '',
@@ -115,6 +113,29 @@ export const EmployeesPage: React.FC = () => {
   // Feedback notifications
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // In-modal error and loading states
+  const [addFormError, setAddFormError] = useState<string | null>(null);
+  const [isAddingEmployee, setIsAddingEmployee] = useState(false);
+
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [isUpdatingEmployee, setIsUpdatingEmployee] = useState(false);
+
+  const [docFormError, setDocFormError] = useState<string | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
+  // Quick Add Custom Department / Designation States
+  const [isQuickDeptModalOpen, setIsQuickDeptModalOpen] = useState(false);
+  const [quickDeptName, setQuickDeptName] = useState('');
+  const [quickDeptCode, setQuickDeptCode] = useState('');
+  const [quickDeptSubmitting, setQuickDeptSubmitting] = useState(false);
+  const [quickDeptError, setQuickDeptError] = useState<string | null>(null);
+
+  const [isQuickDesigModalOpen, setIsQuickDesigModalOpen] = useState(false);
+  const [quickDesigTitle, setQuickDesigTitle] = useState('');
+  const [quickDesigCode, setQuickDesigCode] = useState('');
+  const [quickDesigSubmitting, setQuickDesigSubmitting] = useState(false);
+  const [quickDesigError, setQuickDesigError] = useState<string | null>(null);
 
   const showNotification = (msg: string, isError = false) => {
     if (isError) {
@@ -161,32 +182,64 @@ export const EmployeesPage: React.FC = () => {
   const loadFormOptions = async () => {
     try {
       const targetCompany = activeCompanyId !== 'all' ? (activeCompanyId || activeCompany?.id || undefined) : undefined;
-      const [brs, branchesData, depts, desigs, shfts] = await Promise.all([
+      const [brs, depts, desigs, shfts] = await Promise.all([
         api.getBrands(targetCompany ? { companyId: targetCompany } : undefined),
-        api.getBranches(),
         api.getDepartments(),
         api.getDesignations(),
         api.getShiftsList ? api.getShiftsList() : api.getShifts()
       ]);
       setBrands(brs);
-      setBranches(branchesData);
       setDepartments(depts);
       setDesignations(desigs);
       setShifts(shfts);
 
       if (brs.length > 0) {
+        const initialBrand = brs[0];
+        const brandDepts = depts.filter(d => d.brandId === initialBrand.id);
+        const brandDesigs = desigs.filter(d => d.brandId === initialBrand.id);
+        const brandShifts = shfts.filter(s => !s.brandId || s.brandId === initialBrand.id);
+
         setNewEmployeeForm(prev => ({
           ...prev,
-          brandId: brs[0].id,
-          branchId: branchesData[0]?.id || '',
-          departmentId: depts[0]?.id || '',
-          designationId: desigs[0]?.id || '',
-          shiftId: shfts[0]?.id || ''
+          brandId: initialBrand.id,
+          departmentId: brandDepts[0]?.id || depts[0]?.id || '',
+          designationId: brandDesigs[0]?.id || desigs[0]?.id || '',
+          shiftId: brandShifts[0]?.id || ''
         }));
       }
     } catch (err) {
       console.error('Failed to load form options:', err);
     }
+  };
+
+  // Dynamically filter department, designation, and shift options by selected Brand
+  const formDepartments = useMemo(() => {
+    if (!newEmployeeForm.brandId) return departments;
+    return departments.filter(d => d.brandId === newEmployeeForm.brandId);
+  }, [departments, newEmployeeForm.brandId]);
+
+  const formDesignations = useMemo(() => {
+    if (!newEmployeeForm.brandId) return designations;
+    return designations.filter(d => d.brandId === newEmployeeForm.brandId);
+  }, [designations, newEmployeeForm.brandId]);
+
+  const formShifts = useMemo(() => {
+    if (!newEmployeeForm.brandId) return shifts;
+    return shifts.filter(s => !s.brandId || s.brandId === newEmployeeForm.brandId);
+  }, [shifts, newEmployeeForm.brandId]);
+
+  const handleBrandChange = (brandId: string) => {
+    const brandDepts = departments.filter(d => d.brandId === brandId);
+    const brandDesigs = designations.filter(d => d.brandId === brandId);
+    const brandShifts = shifts.filter(s => !s.brandId || s.brandId === brandId);
+
+    setNewEmployeeForm(prev => ({
+      ...prev,
+      brandId,
+      departmentId: brandDepts[0]?.id || '',
+      designationId: brandDesigs[0]?.id || '',
+      shiftId: brandShifts[0]?.id || ''
+    }));
   };
 
   // Load single employee complete profile
@@ -265,7 +318,6 @@ export const EmployeesPage: React.FC = () => {
       biometricId: emp.biometricId || '',
       monthlySalary: emp.monthlySalary?.toString() || '0',
       brandId: emp.brandId,
-      branchId: emp.branchId,
       gender: emp.gender || 'MALE',
       departmentId: emp.departmentId,
       designationId: emp.designationId,
@@ -278,6 +330,8 @@ export const EmployeesPage: React.FC = () => {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmpId) return;
+    setEditFormError(null);
+    setIsUpdatingEmployee(true);
 
     try {
       await api.updateEmployee(selectedEmpId, {
@@ -291,7 +345,9 @@ export const EmployeesPage: React.FC = () => {
       setIsEditModalOpen(false);
       loadProfile(selectedEmpId);
     } catch (err: any) {
-      showNotification(err.message || 'Failed to update employee', true);
+      setEditFormError(err.message || 'Failed to update employee');
+    } finally {
+      setIsUpdatingEmployee(false);
     }
   };
 
@@ -322,9 +378,11 @@ export const EmployeesPage: React.FC = () => {
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmpId || !docForm.fileUrl) {
-      alert('Please select a file to upload.');
+      setDocFormError('Please select a file to upload.');
       return;
     }
+    setDocFormError(null);
+    setIsUploadingDoc(true);
 
     try {
       await api.uploadEmployeeDocument(selectedEmpId, docForm);
@@ -341,7 +399,9 @@ export const EmployeesPage: React.FC = () => {
       });
       loadProfile(selectedEmpId);
     } catch (err: any) {
-      showNotification(err.message || 'Failed to upload document', true);
+      setDocFormError(err.message || 'Failed to upload document');
+    } finally {
+      setIsUploadingDoc(false);
     }
   };
 
@@ -362,6 +422,9 @@ export const EmployeesPage: React.FC = () => {
   // Create New Employee
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAddFormError(null);
+    setIsAddingEmployee(true);
+
     try {
       await api.createEmployee({
         ...newEmployeeForm,
@@ -369,9 +432,97 @@ export const EmployeesPage: React.FC = () => {
       });
       showNotification('New employee added successfully.');
       setIsAddModalOpen(false);
+      setAddFormError(null);
+      setNewEmployeeForm({
+        employeeId: '',
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        brandId: brands[0]?.id || '',
+        departmentId: '',
+        designationId: '',
+        shiftId: '',
+        joiningDate: new Date().toISOString().split('T')[0],
+        biometricId: '',
+        gender: 'MALE',
+        dateOfBirth: '',
+        monthlySalary: ''
+      });
       loadEmployees();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to create employee', true);
+      setAddFormError(err.message || 'Failed to create employee');
+    } finally {
+      setIsAddingEmployee(false);
+    }
+  };
+
+  // Quick Add Custom Department Handlers
+  const handleQuickAddDept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickDeptName.trim()) {
+      setQuickDeptError('Department name is required');
+      return;
+    }
+    const targetBrandId = newEmployeeForm.brandId || brands[0]?.id;
+    if (!targetBrandId) {
+      setQuickDeptError('Please select a brand first');
+      return;
+    }
+    try {
+      setQuickDeptSubmitting(true);
+      setQuickDeptError(null);
+      const newDept = await api.createDepartment({
+        name: quickDeptName.trim(),
+        code: quickDeptCode.trim() || undefined,
+        brandId: targetBrandId
+      });
+      const dData = await api.getDepartments(targetBrandId);
+      setDepartments(dData);
+      setNewEmployeeForm(prev => ({ ...prev, departmentId: newDept.id }));
+      setIsQuickDeptModalOpen(false);
+      setQuickDeptName('');
+      setQuickDeptCode('');
+      showNotification(`Custom department "${newDept.name}" created and selected.`);
+    } catch (err: any) {
+      setQuickDeptError(err.message || 'Failed to create department');
+    } finally {
+      setQuickDeptSubmitting(false);
+    }
+  };
+
+  // Quick Add Custom Designation Handlers
+  const handleQuickAddDesig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickDesigTitle.trim()) {
+      setQuickDesigError('Designation title is required');
+      return;
+    }
+    const targetBrandId = newEmployeeForm.brandId || brands[0]?.id;
+    if (!targetBrandId) {
+      setQuickDesigError('Please select a brand first');
+      return;
+    }
+    try {
+      setQuickDesigSubmitting(true);
+      setQuickDesigError(null);
+      const newDesig = await api.createDesignation({
+        title: quickDesigTitle.trim(),
+        code: quickDesigCode.trim() || undefined,
+        brandId: targetBrandId,
+        departmentId: newEmployeeForm.departmentId || undefined
+      });
+      const desData = await api.getDesignations(targetBrandId);
+      setDesignations(desData);
+      setNewEmployeeForm(prev => ({ ...prev, designationId: newDesig.id }));
+      setIsQuickDesigModalOpen(false);
+      setQuickDesigTitle('');
+      setQuickDesigCode('');
+      showNotification(`Custom designation "${newDesig.title}" created and selected.`);
+    } catch (err: any) {
+      setQuickDesigError(err.message || 'Failed to create designation');
+    } finally {
+      setQuickDesigSubmitting(false);
     }
   };
 
@@ -452,11 +603,10 @@ export const EmployeesPage: React.FC = () => {
         )}
 
         {/* Quick Summary Banner */}
-        <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-2xs grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
+        <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-xl shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
           <div>
-            <span className="text-slate-400 font-medium block">Brand & Branch</span>
+            <span className="text-slate-400 font-medium block">Brand</span>
             <span className="font-bold text-slate-800 block truncate">{emp.brand?.name}</span>
-            <span className="text-[11px] text-slate-500 block truncate">{emp.branch?.name} ({emp.branch?.city})</span>
           </div>
 
           <div>
@@ -508,10 +658,10 @@ export const EmployeesPage: React.FC = () => {
         </div>
 
         {/* Profile Tabs (5 Clear Sections per Requirement 3) */}
-        <div className="flex border-b border-slate-200 gap-6">
+        <div className="flex border-b border-slate-200 gap-2 sm:gap-6 overflow-x-auto pb-0.5">
           <button
             onClick={() => setActiveProfileTab('profile')}
-            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeProfileTab === 'profile'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -523,7 +673,7 @@ export const EmployeesPage: React.FC = () => {
 
           <button
             onClick={() => setActiveProfileTab('attendance')}
-            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeProfileTab === 'attendance'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -538,7 +688,7 @@ export const EmployeesPage: React.FC = () => {
 
           <button
             onClick={() => setActiveProfileTab('leave')}
-            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeProfileTab === 'leave'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -553,7 +703,7 @@ export const EmployeesPage: React.FC = () => {
 
           <button
             onClick={() => setActiveProfileTab('salary')}
-            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeProfileTab === 'salary'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -568,7 +718,7 @@ export const EmployeesPage: React.FC = () => {
 
           <button
             onClick={() => setActiveProfileTab('documents')}
-            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap shrink-0 ${
               activeProfileTab === 'documents'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -624,10 +774,6 @@ export const EmployeesPage: React.FC = () => {
                 <div>
                   <span className="text-slate-400 font-medium block">Brand Placement</span>
                   <span className="font-semibold text-slate-800">{emp.brand?.name}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium block">Branch Location</span>
-                  <span className="font-semibold text-slate-800">{emp.branch?.name} ({emp.branch?.city})</span>
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium block">Department</span>
@@ -808,17 +954,17 @@ export const EmployeesPage: React.FC = () => {
             {attendanceSubView === 'daily' && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-xs border-collapse min-w-[780px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                       <tr>
-                        <th className="py-3 px-4">Date</th>
-                        <th className="py-3 px-4">Shift Timing</th>
-                        <th className="py-3 px-4">Punch In & Out</th>
-                        <th className="py-3 px-4">Late Arrival</th>
-                        <th className="py-3 px-4">Working Hours</th>
-                        <th className="py-3 px-4">Shortfall Hours</th>
-                        <th className="py-3 px-4">Overtime</th>
-                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Date</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Shift Timing</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Punch In & Out</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Late Arrival</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Working Hours</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Shortfall Hours</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Overtime</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -918,15 +1064,15 @@ export const EmployeesPage: React.FC = () => {
             {attendanceSubView === 'punches' && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                       <tr>
-                        <th className="py-3 px-4">Punch Timestamp</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Verification Method</th>
-                        <th className="py-3 px-4">Biometric ID</th>
-                        <th className="py-3 px-4">Device Name</th>
-                        <th className="py-3 px-4">Location</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Punch Timestamp</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Type</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Verification Method</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Biometric ID</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Device Name</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Location</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1021,15 +1167,15 @@ export const EmployeesPage: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                     <tr>
-                      <th className="py-3 px-4">Leave Type</th>
-                      <th className="py-3 px-4">Duration</th>
-                      <th className="py-3 px-4">Reason</th>
-                      <th className="py-3 px-4">Applied Date</th>
-                      <th className="py-3 px-4">Reviewed Date</th>
-                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Leave Type</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Duration</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Reason</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Applied Date</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Reviewed Date</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1113,17 +1259,17 @@ export const EmployeesPage: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[780px]">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                     <tr>
-                      <th className="py-3 px-4">Period</th>
-                      <th className="py-3 px-4">Fixed Salary</th>
-                      <th className="py-3 px-4">Overtime Amount</th>
-                      <th className="py-3 px-4">Shortfall Deduction</th>
-                      <th className="py-3 px-4">Incentives</th>
-                      <th className="py-3 px-4">Net Payable Salary</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Payslip</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Period</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Fixed Salary</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Overtime Amount</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Shortfall Deduction</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Incentives</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Net Payable Salary</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                      <th className="py-3 px-4 text-right whitespace-nowrap">Payslip</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1220,15 +1366,15 @@ export const EmployeesPage: React.FC = () => {
             {/* Documents List Table */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                     <tr>
-                      <th className="py-3 px-4">Document Title</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">File Name</th>
-                      <th className="py-3 px-4">Size</th>
-                      <th className="py-3 px-4">Uploaded Date</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Document Title</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Category</th>
+                      <th className="py-3 px-4 whitespace-nowrap">File Name</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Size</th>
+                      <th className="py-3 px-4 whitespace-nowrap">Uploaded Date</th>
+                      <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1309,12 +1455,29 @@ export const EmployeesPage: React.FC = () => {
         {/* ============================================================ */}
         <Modal
           isOpen={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditFormError(null);
+          }}
           title={`Edit Profile: ${emp.firstName} ${emp.lastName}`}
           description="Update employee personal details, placement, shift, and fixed monthly salary."
           maxWidth="max-w-2xl"
         >
           <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
+            {/* Form-level Error Alert */}
+            {editFormError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{editFormError}</div>
+                <button
+                  type="button"
+                  onClick={() => setEditFormError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             {/* Name & Contact */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1522,19 +1685,31 @@ export const EmployeesPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-white/95 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-2 shadow-xs z-10">
               <button
                 type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
+                disabled={isUpdatingEmployee}
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditFormError(null);
+                }}
+                className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+                disabled={isUpdatingEmployee}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
               >
-                Save Changes
+                {isUpdatingEmployee ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <span>Save Changes</span>
+                )}
               </button>
             </div>
           </form>
@@ -1545,12 +1720,29 @@ export const EmployeesPage: React.FC = () => {
         {/* ============================================================ */}
         <Modal
           isOpen={isDocModalOpen}
-          onClose={() => setIsDocModalOpen(false)}
+          onClose={() => {
+            setIsDocModalOpen(false);
+            setDocFormError(null);
+          }}
           title={`Upload Document for ${emp.firstName} ${emp.lastName}`}
           description="Upload identity proof, contracts, certificates, or tax files."
           maxWidth="max-w-md"
         >
           <form onSubmit={handleUploadDocument} className="space-y-4 text-xs">
+            {/* Form-level Error Alert */}
+            {docFormError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{docFormError}</div>
+                <button
+                  type="button"
+                  onClick={() => setDocFormError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Document Title *</label>
               <input
@@ -1603,19 +1795,31 @@ export const EmployeesPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-white/95 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-2 shadow-xs z-10">
               <button
                 type="button"
-                onClick={() => setIsDocModalOpen(false)}
-                className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
+                disabled={isUploadingDoc}
+                onClick={() => {
+                  setIsDocModalOpen(false);
+                  setDocFormError(null);
+                }}
+                className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+                disabled={isUploadingDoc}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
               >
-                Upload Document
+                {isUploadingDoc ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <span>Upload Document</span>
+                )}
               </button>
             </div>
           </form>
@@ -1643,7 +1847,10 @@ export const EmployeesPage: React.FC = () => {
 
         {isHrOrAdmin && (
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setAddFormError(null);
+              setIsAddModalOpen(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" /> Add Employee
@@ -1728,117 +1935,220 @@ export const EmployeesPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Clean Table per Requirement 1 */}
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        {/* Desktop / Tablet Table View */}
+        <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
               <tr>
-                <th className="py-3 px-4">Employee ID</th>
-                <th className="py-3 px-4">Employee Name</th>
-                {(!activeCompanyId || activeCompanyId === 'all') && <th className="py-3 px-4">Company</th>}
-                <th className="py-3 px-4">Brand</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4">Designation</th>
-                <th className="py-3 px-4">Contact Number</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Action</th>
+                <th className="py-3 px-4 whitespace-nowrap">Employee</th>
+                <th className="py-3 px-4 whitespace-nowrap">Role &amp; Organization</th>
+                <th className="py-3 px-4 whitespace-nowrap">Contact</th>
+                <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={(!activeCompanyId || activeCompanyId === 'all') ? 9 : 8} className="py-8 text-center text-slate-400">
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
                     Loading employee directory...
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan={(!activeCompanyId || activeCompanyId === 'all') ? 9 : 8} className="py-8 text-center text-slate-400">
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
                     No employee records match the search criteria.
                   </td>
                 </tr>
               ) : (
-                employees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                      {emp.employeeId}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                        <span>{emp.firstName} {emp.lastName}</span>
-                        {emp.gender && (
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
-                            emp.gender === 'FEMALE' ? 'bg-pink-50 text-pink-700 border border-pink-200' :
-                            emp.gender === 'MALE' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                            'bg-slate-100 text-slate-600'
-                          }`}>
-                            {emp.gender === 'FEMALE' ? '♀ Female' : emp.gender === 'MALE' ? '♂ Male' : emp.gender}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                        <Mail className="w-3 h-3" /> {emp.email}
-                      </div>
-                    </td>
-
-                    {(!activeCompanyId || activeCompanyId === 'all') && (
+                employees.map((emp) => {
+                  const initials = `${emp.firstName?.[0] || ''}${emp.lastName?.[0] || ''}`.toUpperCase() || 'E';
+                  return (
+                    <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
+                      {/* Combined Employee Details */}
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {emp.company?.name || (emp.brand as any)?.company?.name || 'Company'}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                              <span className="truncate">{emp.firstName} {emp.lastName}</span>
+                              {emp.gender && (
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full whitespace-nowrap ${
+                                  emp.gender === 'FEMALE' ? 'bg-pink-50 text-pink-700 border border-pink-200' :
+                                  emp.gender === 'MALE' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {emp.gender === 'FEMALE' ? '♀' : emp.gender === 'MALE' ? '♂' : ''} {emp.gender}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                              <span className="font-semibold text-slate-700">{emp.employeeId}</span>
+                              {emp.email && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-400 truncate max-w-[180px]">{emp.email}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </td>
-                    )}
 
-                    <td className="py-3 px-4">
-                      <span className="font-semibold text-slate-800">{emp.brand?.name}</span>
-                    </td>
+                      {/* Combined Role & Organization */}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-800">
+                          {emp.designation?.title || 'Team Member'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span>{emp.department?.name || 'Department'}</span>
+                          <span>•</span>
+                          <span className="font-medium text-slate-700">{emp.brand?.name}</span>
+                          {(!activeCompanyId || activeCompanyId === 'all') && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {emp.company?.name || (emp.brand as any)?.company?.name || 'Company'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="py-3 px-4 text-slate-700">
-                      {emp.department?.name || '—'}
-                    </td>
+                      {/* Contact */}
+                      <td className="py-3 px-4 text-slate-600 font-mono text-[11px] whitespace-nowrap">
+                        {emp.phone ? (
+                          <div className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>{emp.phone}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
 
-                    <td className="py-3 px-4 text-slate-700">
-                      {emp.designation?.title || '—'}
-                    </td>
+                      {/* Status */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <Badge variant={emp.employeeStatus === 'ACTIVE' ? 'success' : 'neutral'}>
+                          {emp.employeeStatus}
+                        </Badge>
+                      </td>
 
-                    <td className="py-3 px-4 text-slate-600 font-mono">
-                      {emp.phone || '—'}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <Badge variant={emp.employeeStatus === 'ACTIVE' ? 'success' : 'neutral'}>
-                        {emp.employeeStatus}
-                      </Badge>
-                    </td>
-
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleViewProfile(emp)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-semibold border border-brand-200 transition-colors shadow-2xs"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Profile</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      {/* Action */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleViewProfile(emp)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-semibold border border-brand-200 transition-colors shadow-2xs whitespace-nowrap"
+                        >
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                          <span>View Profile</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View (< sm) */}
+        <div className="sm:hidden space-y-3">
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+              Loading employee directory...
+            </div>
+          ) : employees.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+              No employee records match the search criteria.
+            </div>
+          ) : (
+            employees.map((emp) => {
+              const initials = `${emp.firstName?.[0] || ''}${emp.lastName?.[0] || ''}`.toUpperCase() || 'E';
+              return (
+                <div
+                  key={emp.id}
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900 truncate text-sm">
+                          {emp.firstName} {emp.lastName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          {emp.employeeId}
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant={emp.employeeStatus === 'ACTIVE' ? 'success' : 'neutral'}>
+                      {emp.employeeStatus}
+                    </Badge>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-xs">
+                    <div className="font-semibold text-slate-800">
+                      {emp.designation?.title || 'Team Member'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+                      <span>{emp.department?.name || 'Department'}</span>
+                      <span>•</span>
+                      <span className="font-medium text-slate-700">{emp.brand?.name}</span>
+                    </div>
+                    {emp.phone && (
+                      <div className="text-[11px] text-slate-600 font-mono flex items-center gap-1 pt-1">
+                        <Phone className="w-3 h-3 text-slate-400" />
+                        <span>{emp.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleViewProfile(emp)}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-semibold border border-brand-200 transition-colors shadow-2xs"
+                    >
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
+                      <span>View Profile</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
       {/* Add Employee Modal */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setAddFormError(null);
+        }}
         title="Add New Employee"
         description="Register employee profile, organization placement, and biometric ID mapping."
         maxWidth="max-w-2xl"
       >
         <form onSubmit={handleCreateEmployee} className="space-y-4 text-xs">
+          {/* In-Modal Form Error Alert */}
+          {addFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{addFormError}</div>
+              <button
+                type="button"
+                onClick={() => setAddFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Employee ID *</label>
@@ -1933,13 +2243,12 @@ export const EmployeesPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Brand *</label>
               <select
                 required
                 value={newEmployeeForm.brandId}
-                onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, brandId: e.target.value })}
+                onChange={(e) => handleBrandChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
               >
                 {brands.map((b) => (
@@ -1947,46 +2256,68 @@ export const EmployeesPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Branch *</label>
-              <select
-                required
-                value={newEmployeeForm.branchId}
-                onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, branchId: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-              >
-                {branches.map((br) => (
-                  <option key={br.id} value={br.id}>{br.name} ({br.city})</option>
-                ))}
-              </select>
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Department *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Department *</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickDeptError(null);
+                    setQuickDeptName('');
+                    setQuickDeptCode('');
+                    setIsQuickDeptModalOpen(true);
+                  }}
+                  className="text-[11px] font-semibold text-brand-600 hover:text-brand-800 flex items-center gap-0.5 cursor-pointer"
+                  title="Add custom department for this brand"
+                >
+                  <Plus className="w-3 h-3" /> Add Custom
+                </button>
+              </div>
               <select
-                required
                 value={newEmployeeForm.departmentId}
                 onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, departmentId: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
               >
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
+                {formDepartments.length === 0 ? (
+                  <option value="">General (Auto-provisioned)</option>
+                ) : (
+                  formDepartments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Designation *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">Designation *</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickDesigError(null);
+                    setQuickDesigTitle('');
+                    setQuickDesigCode('');
+                    setIsQuickDesigModalOpen(true);
+                  }}
+                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
+                  title="Add custom designation for this brand"
+                >
+                  <Plus className="w-3 h-3" /> Add Custom
+                </button>
+              </div>
               <select
-                required
                 value={newEmployeeForm.designationId}
                 onChange={(e) => setNewEmployeeForm({ ...newEmployeeForm, designationId: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
               >
-                {designations.map((desig) => (
-                  <option key={desig.id} value={desig.id}>{desig.title}</option>
-                ))}
+                {formDesignations.length === 0 ? (
+                  <option value="">General Staff (Auto-provisioned)</option>
+                ) : (
+                  formDesignations.map((desig) => (
+                    <option key={desig.id} value={desig.id}>{desig.title}</option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -2011,26 +2342,155 @@ export const EmployeesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
               >
                 <option value="">Default Shift</option>
-                {shifts.map((s) => (
+                {formShifts.map((s) => (
                   <option key={s.id} value={s.id}>{s.name} ({s.startTime}–{s.endTime})</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-white/95 backdrop-blur-xs border-t border-slate-200 flex items-center justify-end gap-2 shadow-xs z-10">
             <button
               type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
+              disabled={isAddingEmployee}
+              onClick={() => {
+                setIsAddModalOpen(false);
+                setAddFormError(null);
+              }}
+              className="px-3.5 py-2 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={isAddingEmployee}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
             >
-              Add Employee
+              {isAddingEmployee ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Adding Employee...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Employee</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Quick Add Custom Department Modal */}
+      <Modal
+        isOpen={isQuickDeptModalOpen}
+        onClose={() => setIsQuickDeptModalOpen(false)}
+        title="Add Custom Department"
+        description="Creates a customized department for this brand. It will be immediately selected."
+      >
+        <form onSubmit={handleQuickAddDept} className="space-y-4 text-xs">
+          {quickDeptError && (
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{quickDeptError}</span>
+            </div>
+          )}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Department Name *</label>
+            <input
+              required
+              type="text"
+              placeholder="e.g. Sales, Marketing, Operations, Quality"
+              value={quickDeptName}
+              onChange={(e) => setQuickDeptName(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Department Code <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Auto-generated if left blank"
+              value={quickDeptCode}
+              onChange={(e) => setQuickDeptCode(e.target.value.toUpperCase())}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono uppercase"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              disabled={quickDeptSubmitting}
+              onClick={() => setIsQuickDeptModalOpen(false)}
+              className="px-3.5 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={quickDeptSubmitting}
+              className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+            >
+              {quickDeptSubmitting ? 'Creating...' : 'Create & Select'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Quick Add Custom Designation Modal */}
+      <Modal
+        isOpen={isQuickDesigModalOpen}
+        onClose={() => setIsQuickDesigModalOpen(false)}
+        title="Add Custom Designation / Role"
+        description="Creates a customized job title for this brand and department. It will be immediately selected."
+      >
+        <form onSubmit={handleQuickAddDesig} className="space-y-4 text-xs">
+          {quickDesigError && (
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{quickDesigError}</span>
+            </div>
+          )}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Designation Title *</label>
+            <input
+              required
+              type="text"
+              placeholder="e.g. Sales Executive, Lead Architect, QA Specialist"
+              value={quickDesigTitle}
+              onChange={(e) => setQuickDesigTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              Designation Code <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Auto-generated if left blank"
+              value={quickDesigCode}
+              onChange={(e) => setQuickDesigCode(e.target.value.toUpperCase())}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono uppercase"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              disabled={quickDesigSubmitting}
+              onClick={() => setIsQuickDesigModalOpen(false)}
+              className="px-3.5 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={quickDesigSubmitting}
+              className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+            >
+              {quickDesigSubmitting ? 'Creating...' : 'Create & Select'}
             </button>
           </div>
         </form>

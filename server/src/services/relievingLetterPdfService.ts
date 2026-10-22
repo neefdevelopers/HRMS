@@ -12,7 +12,6 @@ export interface RelievingLetterData {
   employeeId: string;
   department: string;
   designation: string;
-  branch: string;
   joiningDate: string;
   lastWorkingDay: string;
   hrRemarks?: string | null;
@@ -103,7 +102,7 @@ export class RelievingLetterPdfService {
         currentY += 95;
         doc.fillColor('#1e293b').fontSize(9.5).font('Helvetica').lineGap(5);
 
-        const p1 = `This is to certify that ${data.employeeName} (Employee ID: ${data.employeeId}) was employed with ${data.brandName} (${data.companyName}) as ${data.designation} in the ${data.department} department at our ${data.branch} location from ${data.joiningDate} to ${data.lastWorkingDay}.`;
+        const p1 = `This is to certify that ${data.employeeName} (Employee ID: ${data.employeeId}) was employed with ${data.brandName} (${data.companyName}) as ${data.designation} in the ${data.department} department from ${data.joiningDate} to ${data.lastWorkingDay}.`;
         doc.text(p1, left, currentY, { width: pageWidth, align: 'justify' });
 
         currentY = doc.y + 12;

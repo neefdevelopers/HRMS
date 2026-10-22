@@ -97,7 +97,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto w-full min-w-0">
       {/* 1. Header and Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
@@ -294,8 +294,8 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* 3. Dedicated Attendance Overview & Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">
+        <div className="lg:col-span-2 min-w-0">
           {metrics && (
             <AttendanceChart
               distribution={metrics.attendanceDistribution}
@@ -304,7 +304,7 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
 
-        <div>
+        <div className="min-w-0">
           {metrics && (
             <BrandDistributionChart
               distribution={metrics.brandDistribution}
@@ -323,7 +323,7 @@ export const DashboardPage: React.FC = () => {
       />
 
       {/* 5. Additional Operational Sections Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
         <RecentJoinersList joiners={metrics?.newJoiners || []} />
         <PayrollSummaryCard payroll={metrics?.payrollSummary} />
       </div>

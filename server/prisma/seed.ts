@@ -27,19 +27,37 @@ async function main() {
   await prisma.leaveType.deleteMany();
   await prisma.holiday.deleteMany();
   await prisma.payrollSummary.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.asset.deleteMany();
+  await prisma.employeeDocument.deleteMany();
+  await prisma.exitRequest.deleteMany();
+  await prisma.systemSetting.deleteMany();
+  await prisma.companyMembership.deleteMany();
   await prisma.user.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.shift.deleteMany();
   await prisma.designation.deleteMany();
   await prisma.department.deleteMany();
-  await prisma.branch.deleteMany();
   await prisma.brand.deleteMany();
+  await prisma.company.deleteMany();
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
-  // 1. Create Brands
+  // 1. Create Default Company
+  const defaultCompany = await prisma.company.create({
+    data: {
+      name: 'Apex Group Enterprises',
+      code: 'APEX_CORP',
+      email: 'hq@apexgroup.com',
+      phone: '+91 22 4500 0000',
+      address: 'Apex Tower, Bandra Kurla Complex, Mumbai'
+    }
+  });
+
+  // 2. Create Brands (directly under Company, no branches)
   const brandApex = await prisma.brand.create({
     data: {
+      companyId: defaultCompany.id,
       name: 'Apex Retail Group',
       code: 'APEX',
       companyName: 'Apex Omnichannel Retail Enterprises Ltd.',
@@ -51,6 +69,7 @@ async function main() {
 
   const brandNexus = await prisma.brand.create({
     data: {
+      companyId: defaultCompany.id,
       name: 'Nexus Logistics & Supply',
       code: 'NEXUS',
       companyName: 'Nexus Global Supply Chain Solutions Pvt. Ltd.',
@@ -62,6 +81,7 @@ async function main() {
 
   const brandLumina = await prisma.brand.create({
     data: {
+      companyId: defaultCompany.id,
       name: 'Lumina Hospitality',
       code: 'LUMINA',
       companyName: 'Lumina Hotels and Luxury Dining Ltd.',
@@ -69,21 +89,6 @@ async function main() {
       phone: '+91 80 2800 3300',
       address: 'Lumina Grand Hotel, Residency Road, Bengaluru'
     }
-  });
-
-  // 2. Create Branches
-  const branchApexMum = await prisma.branch.create({
-    data: { name: 'Mumbai Corporate Office', code: 'APEX-MUM', brandId: brandApex.id, city: 'Mumbai', state: 'Maharashtra' }
-  });
-  const branchApexDel = await prisma.branch.create({
-    data: { name: 'Delhi Regional Hub', code: 'APEX-DEL', brandId: brandApex.id, city: 'New Delhi', state: 'Delhi' }
-  });
-
-  const branchNexusGgn = await prisma.branch.create({
-    data: { name: 'Gurugram Warehousing Facility', code: 'NEXUS-GGN', brandId: brandNexus.id, city: 'Gurugram', state: 'Haryana' }
-  });
-  const branchLuminaBlr = await prisma.branch.create({
-    data: { name: 'Bengaluru Flagship Hotel', code: 'LUMINA-BLR', brandId: brandLumina.id, city: 'Bengaluru', state: 'Karnataka' }
   });
 
   // 3. Departments
@@ -181,7 +186,6 @@ async function main() {
       ipAddress: '192.168.10.45',
       location: 'Turnstile A, Main Entrance',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       status: 'ONLINE',
       lastHeartbeat: new Date()
     }
@@ -193,7 +197,6 @@ async function main() {
     data: {
       employeeId: 'APEX-1001',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       departmentId: deptHR.id,
       designationId: desigHRManager.id,
       shiftId: shiftGeneralApex.id,
@@ -213,7 +216,6 @@ async function main() {
     data: {
       employeeId: 'APEX-1002',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       departmentId: deptTech.id,
       designationId: desigDev.id,
       shiftId: shiftGeneralApex.id,
@@ -234,7 +236,6 @@ async function main() {
     data: {
       employeeId: 'APEX-1003',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       departmentId: deptSales.id,
       designationId: desigSalesLead.id,
       shiftId: shiftGeneralApex.id,
@@ -255,7 +256,6 @@ async function main() {
     data: {
       employeeId: 'APEX-1004',
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       departmentId: deptTech.id,
       designationId: desigDev.id,
       shiftId: shiftGeneralApex.id,
@@ -277,7 +277,6 @@ async function main() {
     data: {
       employeeId: 'NEXUS-2001',
       brandId: brandNexus.id,
-      branchId: branchNexusGgn.id,
       departmentId: deptOpsNexus.id,
       designationId: desigWarehouseMgr.id,
       shiftId: shiftOpsNexus.id,
@@ -298,7 +297,6 @@ async function main() {
     data: {
       employeeId: 'LUMINA-3001',
       brandId: brandLumina.id,
-      branchId: branchLuminaBlr.id,
       departmentId: deptFoodLumina.id,
       designationId: desigExecutiveChef.id,
       shiftId: shiftLumina.id,
@@ -322,7 +320,8 @@ async function main() {
       passwordHash,
       role: 'ADMIN',
       firstName: 'Platform',
-      lastName: 'Admin'
+      lastName: 'Admin',
+      companyId: defaultCompany.id
     }
   });
 
@@ -334,8 +333,8 @@ async function main() {
       role: 'HR',
       firstName: 'Apex',
       lastName: 'HR',
-      brandId: brandApex.id,
-      branchId: branchApexMum.id
+      companyId: defaultCompany.id,
+      brandId: brandApex.id
     }
   });
 
@@ -346,7 +345,8 @@ async function main() {
       passwordHash,
       role: 'HR',
       firstName: 'Morgan',
-      lastName: 'Multi-HR'
+      lastName: 'Multi-HR',
+      companyId: defaultCompany.id
     }
   });
 
@@ -359,6 +359,15 @@ async function main() {
       firstName: 'Alex',
       lastName: 'Unassigned'
     }
+  });
+
+  // Create memberships
+  await prisma.companyMembership.createMany({
+    data: [
+      { userId: adminUser.id, companyId: defaultCompany.id, role: 'ADMIN' },
+      { userId: hrApexUser.id, companyId: defaultCompany.id, role: 'HR' },
+      { userId: hrMultiUser.id, companyId: defaultCompany.id, role: 'HR' }
+    ]
   });
 
   // 10. Leave Requests & Balances
@@ -419,7 +428,6 @@ async function main() {
     data: {
       employeeId: empManagerApex.id,
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       shiftId: shiftGeneralApex.id,
       date: todayStr,
       checkIn: priyaCheckIn,
@@ -446,7 +454,6 @@ async function main() {
     data: {
       employeeId: empDev1.id,
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       shiftId: shiftGeneralApex.id,
       date: todayStr,
       checkIn: arjunCheckIn,
@@ -461,7 +468,6 @@ async function main() {
     data: {
       employeeId: empDev2.id,
       brandId: brandApex.id,
-      branchId: branchApexMum.id,
       shiftId: shiftGeneralApex.id,
       date: todayStr,
       status: 'ON_LEAVE',
@@ -475,7 +481,6 @@ async function main() {
     data: {
       employeeId: empNexus1.id,
       brandId: brandNexus.id,
-      branchId: branchNexusGgn.id,
       shiftId: shiftOpsNexus.id,
       date: todayStr,
       checkIn: vikramCheckIn,
@@ -680,7 +685,6 @@ async function main() {
         employeeId: 'APEX-1002',
         department: 'Engineering & Technology',
         designation: 'Software Development Engineer',
-        branch: 'Mumbai HQ - BKC',
         joiningDate: '2023-04-01',
         currency: 'INR',
         baseSalary: 45000.0,

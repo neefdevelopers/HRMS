@@ -6,7 +6,6 @@ export interface TokenPayload {
   email: string;
   role: string;
   brandId?: string | null;
-  branchId?: string | null;
   employeeId?: string | null;
 }
 

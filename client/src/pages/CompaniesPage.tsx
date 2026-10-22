@@ -26,7 +26,10 @@ import {
   UserPlus,
   CheckCircle2,
   XCircle,
-  Cpu
+  Cpu,
+  AlertCircle,
+  Loader2,
+  X
 } from 'lucide-react';
 
 export const CompaniesPage: React.FC = () => {
@@ -81,6 +84,10 @@ export const CompaniesPage: React.FC = () => {
     role: 'HR'
   });
 
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   const loadCompanies = async () => {
@@ -115,6 +122,7 @@ export const CompaniesPage: React.FC = () => {
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
     try {
       setSubmitting(true);
       await api.createCompany(createForm);
@@ -135,7 +143,7 @@ export const CompaniesPage: React.FC = () => {
       await loadCompanies();
       await refreshCompanies();
     } catch (err: any) {
-      alert(err.message || 'Failed to create company');
+      setCreateError(err.message || 'Failed to create company. Please check the inputs.');
     } finally {
       setSubmitting(false);
     }
@@ -143,6 +151,7 @@ export const CompaniesPage: React.FC = () => {
 
   const handleOpenEdit = (c: Company) => {
     setSelectedCompany(c);
+    setEditError(null);
     setEditForm({
       name: c.name,
       code: c.code,
@@ -158,6 +167,7 @@ export const CompaniesPage: React.FC = () => {
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompany) return;
+    setEditError(null);
     try {
       setSubmitting(true);
       await api.updateCompany(selectedCompany.id, editForm);
@@ -165,7 +175,7 @@ export const CompaniesPage: React.FC = () => {
       await loadCompanies();
       await refreshCompanies();
     } catch (err: any) {
-      alert(err.message || 'Failed to update company');
+      setEditError(err.message || 'Failed to update company. Please check the inputs.');
     } finally {
       setSubmitting(false);
     }
@@ -203,6 +213,7 @@ export const CompaniesPage: React.FC = () => {
 
   const handleOpenAdminModal = (c: Company) => {
     setSelectedCompany(c);
+    setAdminError(null);
     setAdminForm({
       email: '',
       password: '',
@@ -216,16 +227,16 @@ export const CompaniesPage: React.FC = () => {
   const handleAssignAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompany) return;
+    setAdminError(null);
     try {
       setSubmitting(true);
       await api.assignCompanyAdmin(selectedCompany.id, adminForm);
       setIsAdminModalOpen(false);
-      alert('Company administrator assigned successfully');
       if (isOverviewOpen) {
         handleOpenOverview(selectedCompany);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to assign administrator');
+      setAdminError(err.message || 'Failed to assign administrator. Please check the inputs.');
     } finally {
       setSubmitting(false);
     }
@@ -260,7 +271,10 @@ export const CompaniesPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setCreateError(null);
+            setIsCreateModalOpen(true);
+          }}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Company
@@ -353,32 +367,31 @@ export const CompaniesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Companies Table */}
+      {/* Companies Table & Mobile Cards */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="px-5 py-3">Company</th>
-                <th className="px-5 py-3">Code & IDs</th>
-                <th className="px-5 py-3">Contact</th>
-                <th className="px-5 py-3">Capacity</th>
+                <th className="px-5 py-3">Company & Code</th>
+                <th className="px-5 py-3">Contact & Address</th>
+                <th className="px-5 py-3">Scale & Capacity</th>
                 <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Created</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-slate-400">
+                  <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
                     <div className="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     Loading companies...
                   </td>
                 </tr>
               ) : filteredCompanies.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-slate-400">
+                  <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
                     No companies found matching criteria.
                   </td>
                 </tr>
@@ -394,7 +407,7 @@ export const CompaniesPage: React.FC = () => {
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-xs">
+                          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-xs shrink-0">
                             {company.name.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -406,36 +419,33 @@ export const CompaniesPage: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <span className="text-[11px] text-slate-400">{company.email}</span>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                {company.code}
+                              </span>
+                              <span>•</span>
+                              <span>{company.email}</span>
+                            </div>
                           </div>
                         </div>
                       </td>
 
                       <td className="px-5 py-3.5">
-                        <div className="font-mono text-[11px] font-semibold text-slate-800">
-                          {company.code}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
-                          {company.id}
+                        <div className="text-slate-800 font-medium">{company.phone || '—'}</div>
+                        <div className="text-[11px] text-slate-400 truncate max-w-[180px]">
+                          {company.address || 'No address registered'}
                         </div>
                       </td>
 
                       <td className="px-5 py-3.5">
-                        <div className="text-slate-700">{company.phone || '—'}</div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[160px]">
-                          {company.address || '—'}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3 text-[11px] text-slate-600">
+                        <div className="flex items-center gap-3 text-xs text-slate-600">
                           <span title="Brands" className="flex items-center gap-1">
                             <Building className="w-3.5 h-3.5 text-slate-400" />
-                            {company._count?.brands || 0}
+                            <span className="font-semibold text-slate-800">{company._count?.brands || 0}</span> brands
                           </span>
                           <span title="Employees" className="flex items-center gap-1">
                             <Users className="w-3.5 h-3.5 text-slate-400" />
-                            {company._count?.employees || 0}
+                            <span className="font-semibold text-slate-800">{company._count?.employees || 0}</span> staff
                           </span>
                         </div>
                       </td>
@@ -444,10 +454,9 @@ export const CompaniesPage: React.FC = () => {
                         <Badge variant={company.isActive ? 'success' : 'neutral'}>
                           {company.isActive ? 'Active' : 'Inactive'}
                         </Badge>
-                      </td>
-
-                      <td className="px-5 py-3.5 text-[11px] text-slate-400">
-                        {new Date(company.createdAt).toLocaleDateString()}
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          Added {new Date(company.createdAt).toLocaleDateString()}
+                        </div>
                       </td>
 
                       <td className="px-5 py-3.5 text-right">
@@ -500,6 +509,117 @@ export const CompaniesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {loading ? (
+            <div className="px-5 py-8 text-center text-slate-400">
+              <div className="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading companies...
+            </div>
+          ) : filteredCompanies.length === 0 ? (
+            <div className="px-5 py-8 text-center text-slate-400">
+              No companies found matching criteria.
+            </div>
+          ) : (
+            filteredCompanies.map((company) => {
+              const isCurrent = company.id === activeCompanyId;
+              return (
+                <div key={company.id} className={`p-4 space-y-3 ${isCurrent ? 'bg-brand-50/20' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-xs shrink-0">
+                        {company.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 text-sm">{company.name}</span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-brand-100 text-brand-700 border border-brand-200">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-0.5">
+                          <span className="font-mono text-slate-600 font-semibold">{company.code}</span>
+                          <span>•</span>
+                          <span>{company.email}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant={company.isActive ? 'success' : 'neutral'}>
+                      {company.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs">
+                    <div>
+                      <div className="text-[10px] text-slate-400 uppercase font-medium">Contact & Address</div>
+                      <div className="font-medium text-slate-800 mt-0.5">{company.phone || 'No phone'}</div>
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">{company.address || 'No address'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-400 uppercase font-medium">Scale</div>
+                      <div className="flex items-center gap-2 mt-0.5 font-medium text-slate-800">
+                        <span>{company._count?.brands || 0} brands</span>
+                        <span>•</span>
+                        <span>{company._count?.employees || 0} staff</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Added {new Date(company.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <button
+                      onClick={() => handleSwitchToCompany(company)}
+                      className="px-2.5 py-1 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Switch Workspace
+                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenOverview(company)}
+                        className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        title="View Overview"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenAdminModal(company)}
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        title="Assign Admin"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenEdit(company)}
+                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                        title="Edit Details"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(company)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          company.isActive
+                            ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                            : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
+                        }`}
+                        title={company.isActive ? 'Deactivate' : 'Activate'}
+                      >
+                        <Power className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* ---------------- CREATE COMPANY MODAL ---------------- */}
@@ -511,6 +631,19 @@ export const CompaniesPage: React.FC = () => {
         maxWidth="max-w-2xl"
       >
         <form onSubmit={handleCreateCompany} className="space-y-4">
+          {createError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{createError}</div>
+              <button
+                type="button"
+                onClick={() => setCreateError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name *</label>
@@ -654,9 +787,10 @@ export const CompaniesPage: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
-              {submitting ? 'Creating...' : 'Register Company'}
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{submitting ? 'Creating...' : 'Register Company'}</span>
             </button>
           </div>
         </form>
@@ -671,6 +805,19 @@ export const CompaniesPage: React.FC = () => {
         maxWidth="max-w-xl"
       >
         <form onSubmit={handleUpdateCompany} className="space-y-4">
+          {editError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{editError}</div>
+              <button
+                type="button"
+                onClick={() => setEditError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name *</label>
@@ -757,9 +904,10 @@ export const CompaniesPage: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
-              {submitting ? 'Saving...' : 'Save Changes'}
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{submitting ? 'Saving...' : 'Save Changes'}</span>
             </button>
           </div>
         </form>
@@ -774,6 +922,20 @@ export const CompaniesPage: React.FC = () => {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleAssignAdmin} className="space-y-4">
+          {adminError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{adminError}</div>
+              <button
+                type="button"
+                onClick={() => setAdminError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Admin Email *</label>
@@ -847,9 +1009,10 @@ export const CompaniesPage: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
-              {submitting ? 'Assigning...' : 'Assign Role'}
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{submitting ? 'Assigning...' : 'Assign Role'}</span>
             </button>
           </div>
         </form>
@@ -919,7 +1082,7 @@ export const CompaniesPage: React.FC = () => {
                           ({b.code})
                         </span>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {b._count?.branches || 0} branches • {b._count?.employees || 0} staff
+                          {b._count?.employees || 0} staff
                         </div>
                       </div>
                       <Badge variant={b.isActive ? 'success' : 'neutral'}>

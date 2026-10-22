@@ -17,7 +17,6 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string;
     const employeeId = req.query.employeeId as string;
@@ -58,7 +57,6 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
               companyId: al.companyId || al.employee.companyId,
               employeeId: al.employeeId,
               brandId: al.brandId || al.employee.brandId,
-              branchId: al.employee.branchId,
               shiftId: al.employee.shiftId,
               date,
               status: al.isHalfDay ? 'HALF_DAY' : 'ON_LEAVE',
@@ -91,7 +89,6 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
       where.employeeId = employeeId;
     }
 
-    if (branchId) where.branchId = branchId;
     if (status) where.status = status;
     if (departmentId) {
       where.employee = { ...(where.employee || {}), departmentId };
@@ -115,7 +112,6 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
           }
         },
         brand: { select: { id: true, name: true, code: true } },
-        branch: { select: { id: true, name: true } },
         shift: { select: { id: true, name: true, startTime: true, endTime: true } }
       },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
@@ -287,7 +283,6 @@ export const getDailyLeaves = async (req: AuthenticatedRequest, res: Response) =
   try {
     const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const branchId = req.query.branchId as string;
     const status = req.query.status as string; // Optional: ALL, APPROVED, PENDING, REJECTED
     const effectiveCompanyId = req.effectiveCompanyId;
 
@@ -308,10 +303,6 @@ export const getDailyLeaves = async (req: AuthenticatedRequest, res: Response) =
       baseWhere.brandId = req.user.brandId;
     }
 
-    // Branch Scoping
-    if (branchId) {
-      baseWhere.employee = { ...(baseWhere.employee || {}), branchId };
-    }
 
     // Filtered where clause for returned list
     const listWhere: any = { ...baseWhere };
@@ -340,8 +331,7 @@ export const getDailyLeaves = async (req: AuthenticatedRequest, res: Response) =
             firstName: true,
             lastName: true,
             department: { select: { id: true, name: true } },
-            designation: { select: { id: true, title: true } },
-            branch: { select: { id: true, name: true } }
+            designation: { select: { id: true, title: true } }
           }
         },
         brand: {

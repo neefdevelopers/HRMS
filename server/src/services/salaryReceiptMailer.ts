@@ -36,8 +36,7 @@ export async function generateSalaryReceiptRecord(employeePayrollId: string): Pr
       employee: {
         include: {
           department: true,
-          designation: true,
-          branch: true
+          designation: true
         }
       },
       brand: true,
@@ -69,7 +68,6 @@ export async function generateSalaryReceiptRecord(employeePayrollId: string): Pr
     employeeId: ep.employee.employeeId,
     department: ep.employee.department?.name || 'General',
     designation: ep.employee.designation?.title || 'Staff',
-    branch: ep.employee.branch?.name || 'Headquarters',
     joiningDate: ep.employee.joiningDate,
     currency: ep.currency || 'INR',
     baseSalary: ep.baseSalary,

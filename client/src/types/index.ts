@@ -70,11 +70,9 @@ export interface User {
   activeCompany?: Company | null;
   companies?: Company[];
   brandId?: string | null;
-  branchId?: string | null;
   employeeId?: string | null;
   company?: Company | null;
   brand?: Brand | null;
-  branch?: Branch | null;
   employee?: Employee | null;
   memberships?: CompanyMembership[];
 }
@@ -92,26 +90,10 @@ export interface Brand {
   email?: string | null;
   address?: string | null;
   isActive: boolean;
-  branches?: Branch[];
   _count?: {
     employees: number;
-    branches: number;
     departments: number;
   };
-}
-
-export interface Branch {
-  id: string;
-  name: string;
-  code: string;
-  brandId: string;
-  city: string;
-  state?: string | null;
-  country: string;
-  address?: string | null;
-  phone?: string | null;
-  isActive: boolean;
-  brand?: Brand;
 }
 
 export interface Department {
@@ -119,8 +101,14 @@ export interface Department {
   name: string;
   code: string;
   brandId: string;
+  brand?: Brand;
   description?: string | null;
   isActive: boolean;
+  designations?: Designation[];
+  _count?: {
+    employees?: number;
+    designations?: number;
+  };
 }
 
 export interface Designation {
@@ -128,8 +116,14 @@ export interface Designation {
   title: string;
   code: string;
   brandId: string;
+  brand?: Brand;
   departmentId?: string | null;
+  department?: Department | null;
   description?: string | null;
+  isActive?: boolean;
+  _count?: {
+    employees?: number;
+  };
 }
 
 export interface Shift {
@@ -255,7 +249,6 @@ export interface Employee {
     name: string;
     code?: string;
   } | null;
-  branchId: string;
   departmentId: string;
   designationId: string;
   shiftId?: string | null;
@@ -277,7 +270,6 @@ export interface Employee {
   emergencyContactPhone?: string | null;
   exitDate?: string | null;
   brand?: Brand;
-  branch?: Branch;
   department?: Department;
   designation?: Designation;
   shift?: Shift;
@@ -339,7 +331,6 @@ export interface Attendance {
   id: string;
   employeeId: string;
   brandId: string;
-  branchId: string;
   date: string;
   shiftId?: string | null;
   checkIn?: string | null;
@@ -361,7 +352,6 @@ export interface Attendance {
     designation?: { title: string };
   };
   brand?: { id: string; name: string; code: string };
-  branch?: { id: string; name: string };
   shift?: {
     id: string;
     name: string;
@@ -446,7 +436,6 @@ export interface DailyLeaveRecord {
     lastName: string;
     department?: { id: string; name: string } | null;
     designation?: { id: string; title: string } | null;
-    branch?: { id: string; name: string } | null;
   };
   brand?: {
     id: string;
@@ -580,7 +569,6 @@ export interface EmployeeSalaryConfig {
     email: string;
     joiningDate: string;
     employeeStatus: string;
-    branch?: { id: string; name: string };
     department?: { id: string; name: string };
     designation?: { id: string; title: string };
   };
@@ -699,7 +687,6 @@ export interface EmployeePayroll {
     email: string;
     department?: { name: string };
     designation?: { title: string };
-    branch?: { name: string };
   };
   brand?: {
     id: string;
@@ -938,14 +925,12 @@ export interface PunchingDeviceSetting {
   port?: number | null;
   location?: string | null;
   brandId: string;
-  branchId: string;
   status: string; // ONLINE, OFFLINE, ERROR
   isActive: boolean;
   apiSecret?: string | null;
   lastHeartbeat?: string | null;
   createdAt: string;
   brand?: { id: string; name: string; code: string };
-  branch?: { id: string; name: string; code: string };
   _count?: { mappings: number; punchRecords: number };
 }
 
@@ -1050,7 +1035,6 @@ export interface ExitRequest {
     employeeStatus: string;
     department?: { id: string; name: string };
     designation?: { id: string; title: string };
-    branch?: { id: string; name: string; city?: string };
   };
   brand?: {
     id: string;
@@ -1088,7 +1072,6 @@ export interface RelievingLetterPreview {
   employeeId: string;
   department: string;
   designation: string;
-  branch: string;
   joiningDate: string;
   lastWorkingDay: string;
   hrRemarks?: string | null;

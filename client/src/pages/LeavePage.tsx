@@ -6,7 +6,7 @@ import { LeaveRequest, LeaveType, Employee } from '../types';
 import { useBrand } from '../context/BrandContext';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Calendar, RefreshCw, CalendarDays, Users, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Calendar, RefreshCw, CalendarDays, Users, CheckCircle2, AlertCircle, X, Loader2, ArrowRight } from 'lucide-react';
 
 export const LeavePage: React.FC = () => {
   const { activeCompanyId } = useCompany();
@@ -18,6 +18,8 @@ export const LeavePage: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [leaveFormError, setLeaveFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -70,17 +72,19 @@ export const LeavePage: React.FC = () => {
 
   const handleAddLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const targetEmpId = formData.employeeId || user?.employeeId || employees[0]?.id;
-      if (!targetEmpId) {
-        alert('Please select an employee.');
-        return;
-      }
-      if (!formData.leaveTypeId) {
-        alert('Please select a leave type.');
-        return;
-      }
+    setLeaveFormError(null);
+    const targetEmpId = formData.employeeId || user?.employeeId || employees[0]?.id;
+    if (!targetEmpId) {
+      setLeaveFormError('Please select an employee.');
+      return;
+    }
+    if (!formData.leaveTypeId) {
+      setLeaveFormError('Please select a leave type.');
+      return;
+    }
 
+    setSubmitting(true);
+    try {
       await api.addLeave({
         employeeId: targetEmpId,
         leaveTypeId: formData.leaveTypeId,
@@ -99,7 +103,9 @@ export const LeavePage: React.FC = () => {
       });
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to add leave');
+      setLeaveFormError(err.message || 'Failed to add leave');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -150,6 +156,7 @@ export const LeavePage: React.FC = () => {
           </button>
           <button
             onClick={() => {
+              setLeaveFormError(null);
               if (employees.length > 0 && !formData.employeeId) {
                 setFormData(prev => ({ ...prev, employeeId: employees[0].id }));
               }
@@ -221,83 +228,171 @@ export const LeavePage: React.FC = () => {
 
       {/* Recorded Leaves Table */}
       <Card title="Recorded Leaves">
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-left text-xs">
+        {/* Desktop / Tablet Table View */}
+        <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
               <tr>
-                <th className="px-4 py-3">Employee</th>
-                <th className="px-3 py-3">Leave Type</th>
-                <th className="px-3 py-3">Dates & Duration</th>
+                <th className="px-4 py-3 whitespace-nowrap">Employee</th>
+                <th className="px-3 py-3 whitespace-nowrap">Leave Type &amp; Applied Date</th>
+                <th className="px-3 py-3 whitespace-nowrap">Duration &amp; Schedule</th>
                 <th className="px-3 py-3">Reason / Details</th>
-                <th className="px-3 py-3">Recorded On</th>
-                <th className="px-3 py-3 text-right">Actions</th>
+                {canManageLeaves && <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={canManageLeaves ? 5 : 4} className="px-4 py-8 text-center text-slate-400">
                     <RefreshCw className="w-4 h-4 animate-spin inline-block mr-1.5 text-slate-400" />
                     Loading leave records...
                   </td>
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={canManageLeaves ? 5 : 4} className="px-4 py-8 text-center text-slate-400">
                     No leave records found. Click "+ Add Leave" to record a leave.
                   </td>
                 </tr>
               ) : (
                 requests.map((req) => {
                   const empFullName = `${req.employee?.firstName || ''} ${req.employee?.lastName || ''}`.trim() || 'Employee';
+                  const initials = `${req.employee?.firstName?.[0] || ''}${req.employee?.lastName?.[0] || ''}`.toUpperCase() || 'E';
                   return (
                     <tr key={req.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900">
-                          {empFullName}
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {req.employee?.employeeId} • {req.employee?.department?.name || req.employee?.brand?.name || 'Staff'}
+                      <td className="px-4 py-3 min-w-[180px]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs shrink-0">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 truncate">
+                              {empFullName}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono truncate">
+                              {req.employee?.employeeId} • {req.employee?.department?.name || req.employee?.brand?.name || 'Staff'}
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
+
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200">
                           {req.leaveType?.name || 'Leave'}
                         </span>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          Applied: {new Date(req.appliedAt).toLocaleDateString()}
+                        </div>
                       </td>
-                      <td className="px-3 py-3 font-mono text-slate-700">
-                        <div className="flex items-center gap-1.5">
-                          <span>{req.startDate} to {req.endDate}</span>
-                          <span className="text-[10px] font-sans font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+
+                      <td className="px-3 py-3 font-mono text-slate-700 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <span>{req.startDate}</span>
+                          <ArrowRight className="w-3 h-3 text-slate-300" />
+                          <span>{req.endDate}</span>
+                        </div>
+                        <div className="mt-0.5">
+                          <span className="text-[10px] font-sans font-semibold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
                             {calculateDays(req.startDate, req.endDate)}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-slate-600 max-w-xs truncate" title={req.reason}>
-                        {req.reason}
+
+                      <td className="px-3 py-3 text-slate-600 max-w-sm truncate" title={req.reason}>
+                        {req.reason || <span className="text-slate-400 italic">No notes provided</span>}
                       </td>
-                      <td className="px-3 py-3 font-mono text-slate-400 text-[11px]">
-                        {new Date(req.appliedAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        {canManageLeaves && (
+
+                      {canManageLeaves && (
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             disabled={processingId === req.id}
                             onClick={() => handleDeleteLeave(req.id, empFullName)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 rounded-md border border-rose-200 transition-colors disabled:opacity-50 shadow-2xs"
                             title="Delete leave record"
                           >
                             <Trash2 className="w-3 h-3" />
-                            Delete
+                            <span>Delete</span>
                           </button>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View (< sm) */}
+        <div className="sm:hidden space-y-3">
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+              Loading leave records...
+            </div>
+          ) : requests.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+              No leave records found.
+            </div>
+          ) : (
+            requests.map((req) => {
+              const empFullName = `${req.employee?.firstName || ''} ${req.employee?.lastName || ''}`.trim() || 'Employee';
+              const initials = `${req.employee?.firstName?.[0] || ''}${req.employee?.lastName?.[0] || ''}`.toUpperCase() || 'E';
+              return (
+                <div
+                  key={req.id}
+                  className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900 truncate">
+                          {empFullName}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono truncate">
+                          {req.employee?.employeeId} • {req.employee?.department?.name || 'Staff'}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 whitespace-nowrap">
+                      {req.leaveType?.name || 'Leave'}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-slate-50 rounded-lg flex items-center justify-between text-[11px] font-mono">
+                    <span>{req.startDate} → {req.endDate}</span>
+                    <span className="font-sans font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 text-[10px]">
+                      {calculateDays(req.startDate, req.endDate)}
+                    </span>
+                  </div>
+
+                  {req.reason && (
+                    <p className="text-[11px] text-slate-600 line-clamp-2">
+                      {req.reason}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Applied: {new Date(req.appliedAt).toLocaleDateString()}
+                    </span>
+                    {canManageLeaves && (
+                      <button
+                        disabled={processingId === req.id}
+                        onClick={() => handleDeleteLeave(req.id, empFullName)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md border border-rose-200"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
@@ -310,6 +405,20 @@ export const LeavePage: React.FC = () => {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleAddLeave} className="space-y-4">
+          {leaveFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{leaveFormError}</div>
+              <button
+                type="button"
+                onClick={() => setLeaveFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Employee *</label>
             <select
@@ -395,9 +504,11 @@ export const LeavePage: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition-colors"
+              disabled={submitting}
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50 rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
             >
-              Add Leave
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Add Leave</span>
             </button>
           </div>
         </form>

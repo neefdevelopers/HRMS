@@ -11,7 +11,6 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
     const startDate = (req.query.startDate as string) || today;
     const endDate = (req.query.endDate as string) || today;
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
     const effectiveCompanyId = req.effectiveCompanyId;
 
@@ -46,7 +45,7 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
       });
     }
 
-    // 1. Build Base Filter for Company / Brand / Branch / Department
+    // 1. Build Base Filter for Company / Brand / Department
     const andClauses: any[] = [{ employeeStatus: 'ACTIVE' }];
 
     if (effectiveCompanyId) {
@@ -68,7 +67,6 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
 
     const resolvedBrandId = (brandId && brandId !== 'all') ? brandId : (req.user?.role === Role.HR && req.user?.brandId ? req.user.brandId : undefined);
     if (resolvedBrandId) andClauses.push({ brandId: resolvedBrandId });
-    if (branchId) andClauses.push({ branchId });
     if (departmentId) andClauses.push({ departmentId });
 
     const employeeBaseFilter: any = { AND: andClauses };
@@ -101,7 +99,6 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
           where: {
             brandId: b.id,
             employeeStatus: 'ACTIVE',
-            ...(branchId ? { branchId } : {}),
             ...(departmentId ? { departmentId } : {})
           }
         });

@@ -98,7 +98,7 @@ export const AttendancePage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Date Picker */}
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs">
             <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
@@ -186,54 +186,64 @@ export const AttendancePage: React.FC = () => {
             </button>
           }
         >
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          {/* Desktop Table View */}
+          <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                 <tr>
-                  <th className="px-4 py-3">Biometric Device ID</th>
-                  <th className="px-3 py-3">Employee Name</th>
-                  <th className="px-3 py-3">Punch Timestamp</th>
-                  <th className="px-3 py-3">Punch Type</th>
-                  <th className="px-3 py-3">Verification</th>
-                  <th className="px-3 py-3">Device Serial</th>
-                  <th className="px-3 py-3">Sync Status</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Employee &amp; Biometric ID</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Punch Timing &amp; Type</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Hardware Device &amp; Method</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Sync Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {loadingPunches ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
                       Loading raw biometric punch records...
                     </td>
                   </tr>
                 ) : rawPunches.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
                       No punch records found. Click 'Sync Hardware Punches' to fetch data.
                     </td>
                   </tr>
                 ) : (
                   rawPunches.map((punch: any) => (
                     <tr key={punch.id} className="hover:bg-slate-50/70">
-                      <td className="px-4 py-3 font-mono font-semibold text-slate-900">
-                        {punch.biometricId}
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-slate-900">
+                          {punch.employee
+                            ? `${punch.employee.firstName} ${punch.employee.lastName}`
+                            : 'Unmapped Device ID'}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                          {punch.employee?.employeeId && (
+                            <span className="font-medium text-slate-700">{punch.employee.employeeId}</span>
+                          )}
+                          <span>•</span>
+                          <span className="text-slate-400">Bio ID: #{punch.biometricId}</span>
+                        </div>
                       </td>
-                      <td className="px-3 py-3 font-medium">
-                        {punch.employee
-                          ? `${punch.employee.firstName} ${punch.employee.lastName} (${punch.employee.employeeId})`
-                          : 'Unmapped Device ID'}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="font-mono text-slate-800 font-medium">
+                          {new Date(punch.punchTime).toLocaleString()}
+                        </div>
+                        <div className="mt-1">
+                          <Badge variant="neutral">{punch.punchType}</Badge>
+                        </div>
                       </td>
-                      <td className="px-3 py-3 font-mono text-slate-600">
-                        {new Date(punch.punchTime).toLocaleString()}
+                      <td className="px-3 py-3 whitespace-nowrap text-slate-600">
+                        <div className="font-mono font-medium text-slate-800">
+                          {punch.device?.name || punch.device?.serialNumber || 'GATE-01'}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {punch.verificationType || 'Biometric Sensor'}
+                        </div>
                       </td>
-                      <td className="px-3 py-3">
-                        <Badge variant="neutral">{punch.punchType}</Badge>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">{punch.verificationType}</td>
-                      <td className="px-3 py-3 font-mono text-slate-500">
-                        {punch.device?.serialNumber || 'GATE-01'}
-                      </td>
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Badge variant="success">SYNCED</Badge>
                       </td>
                     </tr>
@@ -241,6 +251,46 @@ export const AttendancePage: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {loadingPunches ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                Loading punch records...
+              </div>
+            ) : rawPunches.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                No punch records found.
+              </div>
+            ) : (
+              rawPunches.map((punch: any) => (
+                <div
+                  key={punch.id}
+                  className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-slate-900">
+                        {punch.employee
+                          ? `${punch.employee.firstName} ${punch.employee.lastName}`
+                          : 'Unmapped Device ID'}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {punch.employee?.employeeId ? `${punch.employee.employeeId} • ` : ''}Bio #{punch.biometricId}
+                      </div>
+                    </div>
+                    <Badge variant="success">SYNCED</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100">
+                    <span className="font-mono text-slate-700">
+                      {new Date(punch.punchTime).toLocaleString()}
+                    </span>
+                    <Badge variant="neutral">{punch.punchType}</Badge>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </Card>
       )}

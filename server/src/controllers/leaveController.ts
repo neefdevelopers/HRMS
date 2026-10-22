@@ -219,7 +219,6 @@ export const applyLeave = async (req: AuthenticatedRequest, res: Response) => {
           companyId: employee.companyId,
           employeeId: employee.id,
           brandId: employee.brandId,
-          branchId: employee.branchId,
           shiftId: employee.shiftId,
           date: dateStr,
           status: 'ON_LEAVE',
@@ -363,7 +362,6 @@ export const reviewLeave = async (req: AuthenticatedRequest, res: Response) => {
             companyId: leave.employee.companyId,
             employeeId: leave.employeeId,
             brandId: leave.brandId,
-            branchId: leave.employee.branchId,
             date: dateStr,
             status: leave.isHalfDay ? 'HALF_DAY' : 'ON_LEAVE'
           }

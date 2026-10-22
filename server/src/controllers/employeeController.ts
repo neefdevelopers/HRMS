@@ -13,7 +13,6 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
     const limit = parseInt(req.query.limit as string) || 20;
     const search = (req.query.search as string) || '';
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string;
     const effectiveCompanyId = req.effectiveCompanyId;
@@ -47,7 +46,6 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
       andClauses.push({ brandId: req.user.brandId });
     }
 
-    if (branchId) andClauses.push({ branchId });
     if (departmentId) andClauses.push({ departmentId });
     if (status) andClauses.push({ employeeStatus: status });
 
@@ -82,7 +80,6 @@ export const getEmployees = async (req: AuthenticatedRequest, res: Response) => 
             company: { select: { id: true, name: true, code: true } }
           }
         },
-        branch: { select: { id: true, name: true, city: true } },
         department: { select: { id: true, name: true } },
         designation: { select: { id: true, title: true } },
         shift: { select: { id: true, name: true, startTime: true, endTime: true, breakMinutes: true, weeklyOff: true } },
@@ -110,7 +107,6 @@ export const getEmployeeById = async (req: AuthenticatedRequest, res: Response) 
       where: { id },
       include: {
         brand: true,
-        branch: true,
         department: true,
         designation: true,
         shift: true,
@@ -155,7 +151,6 @@ export const getEmployeeCompleteProfile = async (req: AuthenticatedRequest, res:
       where: { id },
       include: {
         brand: true,
-        branch: true,
         department: true,
         designation: true,
         shift: true,
@@ -392,9 +387,8 @@ export const deleteEmployeeDocument = async (req: AuthenticatedRequest, res: Res
 const employeeSchema = z.object({
   employeeId: z.string().min(2),
   brandId: z.string(),
-  branchId: z.string(),
-  departmentId: z.string(),
-  designationId: z.string(),
+  departmentId: z.string().optional(),
+  designationId: z.string().optional(),
   shiftId: z.string().optional().nullable(),
   reportingManagerId: z.string().optional().nullable(),
   firstName: z.string().min(1),
@@ -419,7 +413,10 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
   try {
     const data = employeeSchema.parse(req.body);
 
-    const brand = await prisma.brand.findUnique({ where: { id: data.brandId } });
+    const brand = await prisma.brand.findUnique({
+      where: { id: data.brandId },
+      include: { departments: true, designations: true, shifts: true }
+    });
     if (!brand) {
       return sendError(res, 'Specified brand not found.', 404);
     }
@@ -444,44 +441,103 @@ export const createEmployee = async (req: AuthenticatedRequest, res: Response) =
       return sendError(res, `Employee ID '${data.employeeId}' is already registered in this company.`, 400);
     }
 
-    // Reject assigning branch or department from another brand
-    if (data.branchId) {
-      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
-      if (!branch || branch.brandId !== data.brandId) {
-        return sendError(res, 'Specified branch does not belong to the selected brand.', 400);
-      }
-    }
-    if (data.departmentId) {
+    // 1. Resolve Department: Ensure department belongs to this brand, or pick/create brand default
+    let resolvedDepartmentId: string;
+    if (data.departmentId && data.departmentId.trim() !== '') {
       const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
-      if (!dept || dept.brandId !== data.brandId) {
-        return sendError(res, 'Specified department does not belong to the selected brand.', 400);
+      if (dept && dept.brandId === data.brandId) {
+        resolvedDepartmentId = dept.id;
+      } else {
+        // Fallback to first brand department
+        const firstDept = brand.departments[0] || (await prisma.department.create({
+          data: { name: 'General', code: 'GEN', brandId: data.brandId }
+        }));
+        resolvedDepartmentId = firstDept.id;
       }
+    } else {
+      const firstDept = brand.departments[0] || (await prisma.department.create({
+        data: { name: 'General', code: 'GEN', brandId: data.brandId }
+      }));
+      resolvedDepartmentId = firstDept.id;
     }
 
-    if (data.biometricId) {
+    // 2. Resolve Designation: Ensure designation belongs to this brand, or pick/create brand default
+    let resolvedDesignationId: string;
+    if (data.designationId && data.designationId.trim() !== '') {
+      const desig = await prisma.designation.findUnique({ where: { id: data.designationId } });
+      if (desig && desig.brandId === data.brandId) {
+        resolvedDesignationId = desig.id;
+      } else {
+        const firstDesig = brand.designations[0] || (await prisma.designation.create({
+          data: { title: 'General Staff', code: 'STAFF', brandId: data.brandId, departmentId: resolvedDepartmentId }
+        }));
+        resolvedDesignationId = firstDesig.id;
+      }
+    } else {
+      const firstDesig = brand.designations[0] || (await prisma.designation.create({
+        data: { title: 'General Staff', code: 'STAFF', brandId: data.brandId, departmentId: resolvedDepartmentId }
+      }));
+      resolvedDesignationId = firstDesig.id;
+    }
+
+    // 3. Resolve Shift (optional)
+    let resolvedShiftId: string | undefined = undefined;
+    if (data.shiftId && data.shiftId.trim() !== '') {
+      const shft = await prisma.shift.findUnique({ where: { id: data.shiftId } });
+      if (shft && (!shft.brandId || shft.brandId === data.brandId)) {
+        resolvedShiftId = shft.id;
+      } else if (brand.shifts.length > 0) {
+        resolvedShiftId = brand.shifts[0].id;
+      }
+    } else if (brand.shifts.length > 0) {
+      resolvedShiftId = brand.shifts[0].id;
+    }
+
+    // 4. Biometric ID validation
+    const cleanedBiometricId = data.biometricId?.trim() || null;
+    if (cleanedBiometricId) {
       const existingBio = await prisma.employee.findFirst({
         where: {
           companyId: targetCompanyId,
-          biometricId: data.biometricId
+          biometricId: cleanedBiometricId
         }
       });
       if (existingBio) {
-        return sendError(res, `Biometric ID '${data.biometricId}' is already assigned in this company.`, 400);
+        return sendError(res, `Biometric ID '${cleanedBiometricId}' is already assigned in this company.`, 400);
       }
     }
 
     const employee = await prisma.employee.create({
       data: {
-        ...data,
-        companyId: targetCompanyId,
-        shiftId: data.shiftId || undefined,
-        reportingManagerId: data.reportingManagerId || undefined
+        employeeId: data.employeeId.trim(),
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        email: data.email.trim().toLowerCase(),
+        phone: data.phone?.trim() || null,
+        address: data.address?.trim() || null,
+        profilePhoto: data.profilePhoto?.trim() || null,
+        dateOfBirth: data.dateOfBirth?.trim() || null,
+        joiningDate: data.joiningDate.trim(),
+        exitDate: data.exitDate?.trim() || null,
+        employmentType: data.employmentType || 'FULL_TIME',
+        employeeStatus: data.employeeStatus || 'ACTIVE',
+        biometricId: cleanedBiometricId,
+        emergencyContactName: data.emergencyContactName?.trim() || null,
+        emergencyContactPhone: data.emergencyContactPhone?.trim() || null,
+        gender: data.gender || 'MALE',
+        monthlySalary: data.monthlySalary || 0,
+        brandId: data.brandId,
+        departmentId: resolvedDepartmentId,
+        designationId: resolvedDesignationId,
+        shiftId: resolvedShiftId,
+        reportingManagerId: data.reportingManagerId?.trim() || undefined,
+        companyId: targetCompanyId
       },
       include: {
         brand: true,
-        branch: true,
         department: true,
-        designation: true
+        designation: true,
+        shift: true
       }
     });
 
@@ -574,12 +630,7 @@ export const updateEmployee = async (req: AuthenticatedRequest, res: Response) =
       }
     }
 
-    if (data.branchId) {
-      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
-      if (!branch || branch.brandId !== effectiveBrandId) {
-        return sendError(res, 'Specified branch does not belong to the employee brand.', 400);
-      }
-    }
+
     if (data.departmentId) {
       const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
       if (!dept || dept.brandId !== effectiveBrandId) {
@@ -593,10 +644,9 @@ export const updateEmployee = async (req: AuthenticatedRequest, res: Response) =
         ...data,
         shiftId: data.shiftId === null ? null : data.shiftId,
         reportingManagerId: data.reportingManagerId === null ? null : data.reportingManagerId
-      },
+      } as any,
       include: {
         brand: true,
-        branch: true,
         department: true,
         designation: true,
         shift: true

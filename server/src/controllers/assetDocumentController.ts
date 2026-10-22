@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { assetDocumentService } from '../services/assetDocumentService.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { prisma } from '../config/prisma.js';
 
 export class AssetDocumentController {
   /**
@@ -46,7 +47,14 @@ export class AssetDocumentController {
   async createAsset(req: AuthenticatedRequest, res: Response) {
     try {
       const { name, type, assetTag, serialNumber, brandModel, purchaseDate, status, notes } = req.body;
-      const brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+      let brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+
+      if (!brandId && req.effectiveCompanyId) {
+        const firstBrand = await prisma.brand.findFirst({
+          where: { companyId: req.effectiveCompanyId, isActive: true }
+        });
+        if (firstBrand) brandId = firstBrand.id;
+      }
 
       if (!brandId) return sendError(res, 'Brand ID is required', 400);
       if (!name || !assetTag) return sendError(res, 'Asset name and Asset ID/Tag are required', 400);
@@ -169,7 +177,18 @@ export class AssetDocumentController {
   async createDocument(req: AuthenticatedRequest, res: Response) {
     try {
       const { employeeId, title, documentType, category, fileName, fileType, fileSize, fileUrl, issueDate, expiryDate, remarks, description } = req.body;
-      const brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+      let brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+
+      if (!brandId && employeeId) {
+        const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { brandId: true } });
+        if (emp?.brandId) brandId = emp.brandId;
+      }
+      if (!brandId && req.effectiveCompanyId) {
+        const firstBrand = await prisma.brand.findFirst({
+          where: { companyId: req.effectiveCompanyId, isActive: true }
+        });
+        if (firstBrand) brandId = firstBrand.id;
+      }
 
       if (!employeeId) return sendError(res, 'Employee ID is required', 400);
       if (!title || !fileName || !fileUrl) return sendError(res, 'Title, file name, and file URL/content are required', 400);

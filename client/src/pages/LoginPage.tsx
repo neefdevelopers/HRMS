@@ -37,7 +37,7 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-md border border-slate-200/90 p-8 space-y-6">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-md border border-slate-200/90 p-5 sm:p-8 space-y-6">
         {/* Brand logo & header */}
         <div className="text-center">
           <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center text-white mx-auto shadow-md mb-3 font-bold text-xl">
@@ -98,7 +98,7 @@ export const LoginPage: React.FC = () => {
           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 text-center">
             One-Click Test Accounts (3 Roles)
           </p>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
             <button
               type="button"
               onClick={() => handleDemoSelect('admin@hrms.local', 'password123')}

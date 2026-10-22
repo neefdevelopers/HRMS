@@ -227,8 +227,7 @@ export class PunchSyncService {
       where: { employeeStatus: 'ACTIVE' },
       include: {
         shift: true,
-        brand: true,
-        branch: true
+        brand: true
       }
     });
 
@@ -323,7 +322,6 @@ export class PunchSyncService {
         create: {
           employeeId: emp.id,
           brandId: emp.brandId,
-          branchId: emp.branchId,
           date: dateString,
           shiftId: emp.shiftId,
           checkIn,

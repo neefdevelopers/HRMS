@@ -155,14 +155,6 @@ async function runVerification() {
 
   // Test 7: Organization Hierarchy Integrity
   console.log('\n--- Testing Organization & Cross-Brand Integrity ---');
-  const allBranches = await prisma.branch.findMany({
-    include: { brand: true }
-  });
-  const branchesMatchCompany = allBranches.every((br) => br.brand.companyId !== null);
-  assert(
-    branchesMatchCompany,
-    '12. Hierarchy: All branches belong to brands with valid company ownership'
-  );
 
   const allDepartments = await prisma.department.findMany({
     include: { brand: true }

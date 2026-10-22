@@ -14,7 +14,8 @@ import {
   LogOut as ExitIcon,
   AlertTriangle,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCompany } from '../../context/CompanyContext';
@@ -62,7 +63,11 @@ function getNotificationIcon(type: NotificationType | string) {
   }
 }
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onOpenMobileMenu?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
   const { user, logout, canAccessAllBrands, isAttendanceViewer, isAdmin } = useAuth();
   const { companies, activeCompany, activeCompanyId, setActiveCompanyId, canSwitchCompany } = useCompany();
   const { brands, selectedBrandId, setSelectedBrandId } = useBrand();
@@ -174,11 +179,22 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
       {/* Company & Brand Selectors */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+        {/* Mobile Hamburger Menu Toggle */}
+        <button
+          type="button"
+          onClick={onOpenMobileMenu}
+          className="lg:hidden p-1.5 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
+          title="Open Navigation Menu"
+          aria-label="Open Navigation Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
         {/* Company Selector / Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg text-indigo-900">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg text-indigo-900 shrink-0">
           <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
           <span className="text-xs font-medium text-indigo-600 hidden sm:inline">Company:</span>
           {companies.length === 0 ? (
@@ -187,7 +203,7 @@ export const Navbar: React.FC = () => {
             <select
               value={activeCompanyId || (activeCompany?.id ?? 'all')}
               onChange={(e) => setActiveCompanyId(e.target.value)}
-              className="bg-transparent text-xs font-bold text-indigo-950 border-none focus:outline-none focus:ring-0 cursor-pointer pr-3 max-w-[170px] truncate"
+              className="bg-transparent text-xs font-bold text-indigo-950 border-none focus:outline-none focus:ring-0 cursor-pointer pr-3 max-w-[130px] sm:max-w-[170px] truncate"
             >
               <option value="all" className="text-slate-900 bg-white font-semibold">
                 All Companies
@@ -199,21 +215,21 @@ export const Navbar: React.FC = () => {
               ))}
             </select>
           ) : (
-            <span className="text-xs font-bold text-indigo-950 truncate max-w-[170px]">
+            <span className="text-xs font-bold text-indigo-950 truncate max-w-[130px] sm:max-w-[170px]">
               {activeCompany?.name || 'All Companies'}
             </span>
           )}
         </div>
 
         {/* Brand Selector */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 shrink-0">
           <Building className="w-4 h-4 text-slate-500 shrink-0" />
           <span className="text-xs font-medium text-slate-500 hidden sm:inline">Active Brand:</span>
           {canAccessAllBrands || brands.length > 1 ? (
             <select
               value={selectedBrandId}
               onChange={(e) => setSelectedBrandId(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-slate-900 border-none focus:outline-none focus:ring-0 cursor-pointer pr-4 max-w-[170px] truncate"
+              className="bg-transparent text-xs font-semibold text-slate-900 border-none focus:outline-none focus:ring-0 cursor-pointer pr-4 max-w-[130px] sm:max-w-[170px] truncate"
             >
               <option value="all" className="text-slate-900 bg-white font-semibold">
                 All Brands
@@ -225,7 +241,7 @@ export const Navbar: React.FC = () => {
               ))}
             </select>
           ) : (
-            <span className="text-xs font-semibold text-slate-900 truncate max-w-[170px]">
+            <span className="text-xs font-semibold text-slate-900 truncate max-w-[130px] sm:max-w-[170px]">
               {user?.brand?.name || (brands.length > 0 ? brands[0].name : 'Assigned Brand')}
             </span>
           )}
@@ -233,7 +249,7 @@ export const Navbar: React.FC = () => {
       </div>
 
       {/* User profile & actions */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
 
         {/* ----------------- NOTIFICATION BELL & DROPDOWN ----------------- */}
         {!isAttendanceViewer && (
@@ -258,7 +274,7 @@ export const Navbar: React.FC = () => {
 
           {/* Dropdown Popover */}
           {isOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
               {/* Dropdown Header */}
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">

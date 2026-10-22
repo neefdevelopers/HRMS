@@ -248,7 +248,7 @@ export const NotificationsPage: React.FC = () => {
     companyScope !== 'CURRENT';
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 w-full min-w-0">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -314,7 +314,7 @@ export const NotificationsPage: React.FC = () => {
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Status Tabs (All / Unread / Read) */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg shrink-0">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg shrink-0 overflow-x-auto max-w-full">
             {[
               { id: 'ALL', label: `All (${pagination.total})` },
               {
@@ -544,7 +544,7 @@ export const NotificationsPage: React.FC = () => {
 
                     <button
                       onClick={(e) => handleDelete(notif.id, e)}
-                      className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-all opacity-0 group-hover:opacity-100"
+                      className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
                       title="Delete notification"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

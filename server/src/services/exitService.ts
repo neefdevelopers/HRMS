@@ -140,8 +140,7 @@ export class ExitService {
             joiningDate: true,
             employeeStatus: true,
             department: { select: { id: true, name: true } },
-            designation: { select: { id: true, title: true } },
-            branch: { select: { id: true, name: true, city: true } }
+            designation: { select: { id: true, title: true } }
           }
         },
         brand: {
@@ -689,8 +688,7 @@ export class ExitService {
         employee: {
           include: {
             department: true,
-            designation: true,
-            branch: true
+            designation: true
           }
         },
         brand: true
@@ -716,7 +714,6 @@ export class ExitService {
       employeeId: exitRequest.employee.employeeId,
       department: exitRequest.employee.department?.name || 'General',
       designation: exitRequest.employee.designation?.title || 'Employee',
-      branch: exitRequest.employee.branch?.name || 'Main Office',
       joiningDate: exitRequest.employee.joiningDate,
       lastWorkingDay: exitRequest.lastWorkingDay,
       hrRemarks: exitRequest.hrRemarks,
@@ -745,7 +742,6 @@ export class ExitService {
       employeeId: preview.employeeId,
       department: preview.department,
       designation: preview.designation,
-      branch: preview.branch,
       joiningDate: preview.joiningDate,
       lastWorkingDay: preview.lastWorkingDay,
       hrRemarks: preview.hrRemarks
@@ -856,7 +852,6 @@ export class ExitService {
       employeeId: preview.employeeId,
       department: preview.department,
       designation: preview.designation,
-      branch: preview.branch,
       joiningDate: preview.joiningDate,
       lastWorkingDay: preview.lastWorkingDay,
       hrRemarks: preview.hrRemarks

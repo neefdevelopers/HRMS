@@ -49,7 +49,7 @@ export const ReportsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto w-full min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Reports & Compliance</h1>
@@ -57,7 +57,7 @@ export const ReportsPage: React.FC = () => {
             Export company and brand-specific audit spreadsheets
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5" />
             {activeCompany?.name || 'All Companies'}
@@ -69,13 +69,13 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
         {/* Attendance Report Card */}
         <Card
           title="Attendance & Punctuality Report"
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Start Date</label>
                 <input
@@ -99,7 +99,7 @@ export const ReportsPage: React.FC = () => {
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 text-xs text-slate-600">
               <p className="font-semibold text-slate-800 mb-1">Export includes columns:</p>
               <p className="text-[11px] text-slate-500">
-                Date, Employee ID, Full Name, Brand, Branch, Department, Designation, Shift, Status, Check-In, Check-Out, Total Working Hours, Late Minutes.
+                Date, Employee ID, Full Name, Brand, Department, Designation, Shift, Status, Check-In, Check-Out, Total Working Hours, Late Minutes.
               </p>
             </div>
 

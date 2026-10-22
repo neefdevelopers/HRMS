@@ -127,7 +127,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
   return (
     <div className="space-y-4 animate-in fade-in duration-150">
       {/* KPI Cards Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Approved On Leave */}
         <div className="bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs flex items-center justify-between">
           <div>
@@ -141,7 +141,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
               Active on {selectedDate}
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600 shrink-0">
             <CalendarCheck className="w-5 h-5" />
           </div>
         </div>
@@ -159,7 +159,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
               Full absence authorized
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-600">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-600 shrink-0">
             <Calendar className="w-5 h-5" />
           </div>
         </div>
@@ -177,7 +177,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
               Partial day off
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 shrink-0">
             <Clock className="w-5 h-5" />
           </div>
         </div>
@@ -195,7 +195,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
               {summary.totalRejected > 0 ? `${summary.totalRejected} rejected` : 'Awaiting HR action'}
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500">
+          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
             <AlertCircle className="w-5 h-5" />
           </div>
         </div>
@@ -254,16 +254,16 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
 
         {/* Leave Records Table */}
         <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
               <tr>
-                <th className="px-4 py-3">Employee</th>
-                <th className="px-3 py-3">Brand &amp; Branch</th>
-                <th className="px-3 py-3">Leave Type</th>
-                <th className="px-3 py-3">Leave Duration</th>
-                <th className="px-3 py-3">Coverage</th>
-                <th className="px-3 py-3">Approval Status</th>
-                <th className="px-3 py-3">Operational Notes</th>
+                <th className="px-4 py-3 whitespace-nowrap">Employee</th>
+                <th className="px-3 py-3 whitespace-nowrap">Brand</th>
+                <th className="px-3 py-3 whitespace-nowrap">Leave Type</th>
+                <th className="px-3 py-3 whitespace-nowrap">Leave Duration</th>
+                <th className="px-3 py-3 whitespace-nowrap">Coverage</th>
+                <th className="px-3 py-3 whitespace-nowrap">Approval Status</th>
+                <th className="px-3 py-3 whitespace-nowrap">Operational Notes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -297,16 +297,13 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
                         </div>
                       </td>
 
-                      {/* Brand & Branch */}
-                      <td className="px-3 py-3">
+                      {/* Brand */}
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="font-medium text-slate-800">{item.brand?.name || 'General'}</span>
-                        <span className="block text-[11px] text-slate-500">
-                          {item.employee?.branch?.name || 'Main Branch'}
-                        </span>
                       </td>
 
                       {/* Leave Type */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="font-semibold text-slate-800">
                           {item.leaveType?.name || 'Standard Leave'}
                         </span>
@@ -316,7 +313,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
                       </td>
 
                       {/* Duration */}
-                      <td className="px-3 py-3 font-mono text-slate-700">
+                      <td className="px-3 py-3 font-mono text-slate-700 whitespace-nowrap">
                         {isMultiDay ? (
                           <div>
                             <span className="font-medium text-slate-900">
@@ -332,7 +329,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
                       </td>
 
                       {/* Coverage (Full day vs Half day) */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         {item.isHalfDay ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                             Half Day ({item.halfDayType === 'SECOND_HALF' ? '2nd Half' : '1st Half'})
@@ -345,7 +342,7 @@ export const DailyLeavesSummary: React.FC<DailyLeavesSummaryProps> = ({
                       </td>
 
                       {/* Approval Status */}
-                      <td className="px-3 py-3">{getStatusBadge(item.status)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{getStatusBadge(item.status)}</td>
 
                       {/* Operational Notes */}
                       <td className="px-3 py-3 text-slate-600 max-w-xs truncate" title={item.reason}>

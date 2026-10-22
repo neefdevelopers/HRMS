@@ -1,5 +1,5 @@
 import {
-  DashboardMetrics, User, Brand, Branch, Department, Designation, Shift, Employee,
+  DashboardMetrics, User, Brand, Department, Designation, Shift, Employee,
   Attendance, LeaveRequest, LeaveType, EmployeeSalaryConfig, Incentive, PayrollAdjustment,
   EmployeePayroll, SalaryReceipt, SalaryDashboardData, OvertimeRecord,
   ShiftAssignment, ShiftCalendarData, ShiftAttendanceData,
@@ -93,11 +93,10 @@ export const api = {
   getMe: () => request<User & { activeCompany?: Company; companies?: Company[] }>('/auth/me'),
 
   // Dashboard Metrics
-  getDashboardMetrics: (params: { date?: string; brandId?: string; branchId?: string; departmentId?: string }) => {
+  getDashboardMetrics: (params: { date?: string; brandId?: string; departmentId?: string }) => {
     const searchParams = new URLSearchParams();
     if (params.date) searchParams.append('date', params.date);
     if (params.brandId) searchParams.append('brandId', params.brandId);
-    if (params.branchId) searchParams.append('branchId', params.branchId);
     if (params.departmentId) searchParams.append('departmentId', params.departmentId);
 
     return request<DashboardMetrics>(`/dashboard/metrics?${searchParams.toString()}`);
@@ -127,34 +126,56 @@ export const api = {
   toggleBrandStatus: (id: string, isActive: boolean) =>
     request<Brand>(`/brands/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
 
-  getBranches: (brandId?: string) => {
-    const url = brandId && brandId !== 'all' ? `/brands/branches?brandId=${brandId}` : '/brands/branches';
-    return request<Branch[]>(url);
+  getDepartments: (brandId?: string, companyId?: string) => {
+    const sp = new URLSearchParams();
+    if (brandId && brandId !== 'all') sp.append('brandId', brandId);
+    if (companyId && companyId !== 'all') sp.append('companyId', companyId);
+    const qs = sp.toString();
+    return request<Department[]>(qs ? `/brands/departments?${qs}` : '/brands/departments');
   },
 
-  getDepartments: (brandId?: string) => {
-    const url = brandId && brandId !== 'all' ? `/brands/departments?brandId=${brandId}` : '/brands/departments';
-    return request<Department[]>(url);
+  createDepartment: (data: { name: string; code?: string; brandId: string; description?: string }) =>
+    request<Department>('/brands/departments', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateDepartment: (id: string, data: Partial<Department>) =>
+    request<Department>(`/brands/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteDepartment: (id: string) =>
+    request<{ message: string }>(`/brands/departments/${id}`, { method: 'DELETE' }),
+
+  getDesignations: (brandId?: string, departmentId?: string, companyId?: string) => {
+    const sp = new URLSearchParams();
+    if (brandId && brandId !== 'all') sp.append('brandId', brandId);
+    if (departmentId && departmentId !== 'all') sp.append('departmentId', departmentId);
+    if (companyId && companyId !== 'all') sp.append('companyId', companyId);
+    const qs = sp.toString();
+    return request<Designation[]>(qs ? `/brands/designations?${qs}` : '/brands/designations');
   },
 
-  getDesignations: (brandId?: string) => {
-    const url = brandId && brandId !== 'all' ? `/brands/designations?brandId=${brandId}` : '/brands/designations';
-    return request<Designation[]>(url);
-  },
+  createDesignation: (data: { title: string; code?: string; brandId: string; departmentId?: string; description?: string }) =>
+    request<Designation>('/brands/designations', { method: 'POST', body: JSON.stringify(data) }),
 
-  getShifts: (brandId?: string) => {
-    const url = brandId && brandId !== 'all' ? `/brands/shifts?brandId=${brandId}` : '/brands/shifts';
-    return request<Shift[]>(url);
+  updateDesignation: (id: string, data: Partial<Designation>) =>
+    request<Designation>(`/brands/designations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteDesignation: (id: string) =>
+    request<{ message: string }>(`/brands/designations/${id}`, { method: 'DELETE' }),
+
+  getShifts: (brandId?: string, companyId?: string) => {
+    const sp = new URLSearchParams();
+    if (brandId && brandId !== 'all') sp.append('brandId', brandId);
+    if (companyId && companyId !== 'all') sp.append('companyId', companyId);
+    const qs = sp.toString();
+    return request<Shift[]>(qs ? `/brands/shifts?${qs}` : '/brands/shifts');
   },
 
   // Employees
-  getEmployees: (params: { page?: number; limit?: number; search?: string; brandId?: string; branchId?: string; departmentId?: string; status?: string; companyId?: string }) => {
+  getEmployees: (params: { page?: number; limit?: number; search?: string; brandId?: string; departmentId?: string; status?: string; companyId?: string }) => {
     const sp = new URLSearchParams();
     if (params.page) sp.append('page', params.page.toString());
     if (params.limit) sp.append('limit', params.limit.toString());
     if (params.search) sp.append('search', params.search);
     if (params.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
-    if (params.branchId) sp.append('branchId', params.branchId);
     if (params.departmentId) sp.append('departmentId', params.departmentId);
     if (params.status) sp.append('status', params.status);
     if (params.companyId && params.companyId !== 'all') sp.append('companyId', params.companyId);
@@ -196,13 +217,12 @@ export const api = {
     request<Employee>(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Attendance & Punching
-  getAttendance: (params: { date?: string; startDate?: string; endDate?: string; brandId?: string; branchId?: string; departmentId?: string; status?: string; page?: number }) => {
+  getAttendance: (params: { date?: string; startDate?: string; endDate?: string; brandId?: string; departmentId?: string; status?: string; page?: number }) => {
     const sp = new URLSearchParams();
     if (params.date) sp.append('date', params.date);
     if (params.startDate) sp.append('startDate', params.startDate);
     if (params.endDate) sp.append('endDate', params.endDate);
     if (params.brandId) sp.append('brandId', params.brandId);
-    if (params.branchId) sp.append('branchId', params.branchId);
     if (params.departmentId) sp.append('departmentId', params.departmentId);
     if (params.status) sp.append('status', params.status);
     if (params.page) sp.append('page', params.page.toString());
@@ -210,11 +230,10 @@ export const api = {
     return request<Attendance[]>(`/attendance?${sp.toString()}`);
   },
 
-  getDailyLeaves: (params: { date?: string; brandId?: string; branchId?: string; status?: string }) => {
+  getDailyLeaves: (params: { date?: string; brandId?: string; status?: string }) => {
     const sp = new URLSearchParams();
     if (params.date) sp.append('date', params.date);
     if (params.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
-    if (params.branchId) sp.append('branchId', params.branchId);
     if (params.status) sp.append('status', params.status);
     return request<DailyLeavesData>(`/attendance/daily-leaves?${sp.toString()}`);
   },
@@ -298,10 +317,9 @@ export const api = {
     return request<SalaryDashboardData>(`/salary/dashboard?${sp.toString()}`);
   },
 
-  getSalaryConfigs: (params?: { brandId?: string; branchId?: string; departmentId?: string; status?: string; search?: string }) => {
+  getSalaryConfigs: (params?: { brandId?: string; departmentId?: string; status?: string; search?: string }) => {
     const sp = new URLSearchParams();
     if (params?.brandId && params.brandId !== 'all') sp.append('brandId', params.brandId);
-    if (params?.branchId) sp.append('branchId', params.branchId);
     if (params?.departmentId) sp.append('departmentId', params.departmentId);
     if (params?.status) sp.append('status', params.status);
     if (params?.search) sp.append('search', params.search);

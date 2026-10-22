@@ -81,8 +81,7 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
       include: {
         department: { select: { name: true } },
         designation: { select: { title: true } },
-        brand: { select: { id: true, name: true, code: true } },
-        branch: { select: { id: true, name: true } }
+        brand: { select: { id: true, name: true, code: true } }
       },
       orderBy: { employeeId: 'asc' }
     });
@@ -108,8 +107,7 @@ export const getSalaryOverview = async (req: AuthenticatedRequest, res: Response
             lastName: true,
             email: true,
             department: { select: { name: true } },
-            designation: { select: { title: true } },
-            branch: { select: { name: true } }
+            designation: { select: { title: true } }
           }
         },
         receipt: {
@@ -527,7 +525,6 @@ export const getSalaryDashboard = async (req: AuthenticatedRequest, res: Respons
 export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const branchId = req.query.branchId as string;
     const departmentId = req.query.departmentId as string;
     const status = req.query.status as string; // ACTIVE, SUPERSEDED, INACTIVE
     const search = req.query.search as string;
@@ -552,7 +549,6 @@ export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response)
     }
 
     const employeeWhere: any = {};
-    if (branchId) employeeWhere.branchId = branchId;
     if (departmentId) employeeWhere.departmentId = departmentId;
     if (search) {
       employeeWhere.OR = [
@@ -577,7 +573,6 @@ export const getSalaryConfigs = async (req: AuthenticatedRequest, res: Response)
             email: true,
             joiningDate: true,
             employeeStatus: true,
-            branch: { select: { id: true, name: true } },
             department: { select: { id: true, name: true } },
             designation: { select: { id: true, title: true } }
           }
@@ -602,8 +597,7 @@ export const getEmployeeSalaryConfigHistory = async (req: AuthenticatedRequest, 
       include: {
         brand: true,
         department: true,
-        designation: true,
-        branch: true
+        designation: true
       }
     });
 
@@ -1239,8 +1233,7 @@ export const getPayrolls = async (req: AuthenticatedRequest, res: Response) => {
             lastName: true,
             email: true,
             department: { select: { name: true } },
-            designation: { select: { title: true } },
-            branch: { select: { name: true } }
+            designation: { select: { title: true } }
           }
         },
         brand: { select: { id: true, name: true, code: true } },
@@ -1266,7 +1259,6 @@ export const getPayrollById = async (req: AuthenticatedRequest, res: Response) =
           include: {
             department: true,
             designation: true,
-            branch: true,
             shift: true
           }
         },
@@ -1363,8 +1355,7 @@ export const finalizePayroll = async (req: AuthenticatedRequest, res: Response) 
         employee: {
           include: {
             department: true,
-            designation: true,
-            branch: true
+            designation: true
           }
         },
         brand: true,
@@ -1407,7 +1398,6 @@ export const finalizePayroll = async (req: AuthenticatedRequest, res: Response) 
           employeeId: item.employee.employeeId,
           department: item.employee.department.name,
           designation: item.employee.designation.title,
-          branch: item.employee.branch.name,
           joiningDate: item.employee.joiningDate,
           currency: item.currency,
           baseSalary: item.baseSalary,
@@ -1559,8 +1549,7 @@ export const getReceipts = async (req: AuthenticatedRequest, res: Response) => {
                 firstName: true,
                 lastName: true,
                 department: { select: { name: true } },
-                designation: { select: { title: true } },
-                branch: { select: { name: true } }
+                designation: { select: { title: true } }
               }
             },
             brand: { select: { id: true, name: true, code: true } },
@@ -1614,8 +1603,7 @@ export const downloadReceiptPdf = async (req: AuthenticatedRequest, res: Respons
             employee: {
               include: {
                 department: true,
-                designation: true,
-                branch: true
+                designation: true
               }
             },
             brand: true,
@@ -1647,7 +1635,6 @@ export const downloadReceiptPdf = async (req: AuthenticatedRequest, res: Respons
         employeeId: ep.employee.employeeId,
         department: ep.employee.department.name,
         designation: ep.employee.designation.title,
-        branch: ep.employee.branch.name,
         joiningDate: ep.employee.joiningDate,
         currency: ep.currency,
         baseSalary: ep.baseSalary,

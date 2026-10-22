@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
@@ -9,15 +9,19 @@ import { Building2, AlertCircle, LogOut } from 'lucide-react';
 export const AppLayout: React.FC = () => {
   const { user, isHr, logout } = useAuth();
   const { companies, loading } = useCompany();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isUnassignedHr = isHr && !loading && companies.length === 0;
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
-      <Sidebar />
+      <Sidebar
+        mobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
+      />
       <div className="flex-1 flex flex-col min-w-0">
-        <Navbar />
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+        <Navbar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 overflow-y-auto min-w-0">
           {isUnassignedHr ? (
             <div className="max-w-2xl mx-auto my-12 bg-white rounded-2xl border border-amber-200/80 shadow-sm p-8 text-center animate-in fade-in zoom-in-95">
               <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-5 text-amber-600 shadow-sm">

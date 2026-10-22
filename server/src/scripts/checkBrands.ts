@@ -4,7 +4,7 @@ async function main() {
   const brands = await prisma.brand.findMany({
     include: {
       company: { select: { id: true, name: true, code: true } },
-      _count: { select: { employees: true, branches: true } }
+      _count: { select: { employees: true } }
     }
   });
   console.log('Total Brands in Database:', brands.length);

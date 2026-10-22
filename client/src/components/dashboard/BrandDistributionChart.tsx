@@ -39,15 +39,15 @@ export const BrandDistributionChart: React.FC<BrandDistributionProps> = ({
                     : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <Building2 className={`w-3.5 h-3.5 ${isSelected ? 'text-brand-600' : 'text-slate-400'}`} />
-                    <span className="font-semibold text-slate-800">{brand.brandName}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">({brand.brandCode})</span>
+                <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building2 className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-brand-600' : 'text-slate-400'}`} />
+                    <span className="font-semibold text-slate-800 truncate">{brand.brandName}</span>
+                    <span className="text-[10px] text-slate-400 font-mono shrink-0">({brand.brandCode})</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span className="font-bold text-slate-900">{brand.count}</span>
-                    <span className="text-slate-400">({brand.percentage}%)</span>
+                    <span className="text-slate-400 text-[11px]">({brand.percentage}%)</span>
                     <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
                   </div>
                 </div>

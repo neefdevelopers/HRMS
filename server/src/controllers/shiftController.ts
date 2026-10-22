@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { shiftService } from '../services/shiftService.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { prisma } from '../config/prisma.js';
 
 export class ShiftController {
   /**
@@ -26,7 +27,17 @@ export class ShiftController {
   async createShift(req: AuthenticatedRequest, res: Response) {
     try {
       const { name, code, startTime, endTime, breakMinutes, weeklyOff, gracePeriodMinutes, isDefault } = req.body;
-      const brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+      let brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+
+      if (!brandId && req.effectiveCompanyId) {
+        const defaultBrand = await prisma.brand.findFirst({
+          where: { companyId: req.effectiveCompanyId, isActive: true },
+          select: { id: true }
+        });
+        if (defaultBrand) {
+          brandId = defaultBrand.id;
+        }
+      }
 
       if (!brandId) {
         return sendError(res, 'Brand ID is required to create a shift', 400);
@@ -100,7 +111,27 @@ export class ShiftController {
   async assignShifts(req: AuthenticatedRequest, res: Response) {
     try {
       const { employeeIds, shiftId, startDate, endDate, isRotational, rotationFrequency, rotationShiftIds, notes } = req.body;
-      const brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+      let brandId = req.body.brandId || req.effectiveBrandId || req.user?.brandId;
+
+      if (!brandId && employeeIds && employeeIds.length > 0) {
+        const emp = await prisma.employee.findUnique({
+          where: { id: employeeIds[0] },
+          select: { brandId: true }
+        });
+        if (emp?.brandId) {
+          brandId = emp.brandId;
+        }
+      }
+
+      if (!brandId && req.effectiveCompanyId) {
+        const defaultBrand = await prisma.brand.findFirst({
+          where: { companyId: req.effectiveCompanyId, isActive: true },
+          select: { id: true }
+        });
+        if (defaultBrand) {
+          brandId = defaultBrand.id;
+        }
+      }
 
       if (!brandId) {
         return sendError(res, 'Brand ID is required', 400);

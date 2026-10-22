@@ -67,6 +67,7 @@ export const ExitPage: React.FC = () => {
 
   // Submit Resignation Form State
   const [activeEmployees, setActiveEmployees] = useState<Employee[]>([]);
+  const [submitModalError, setSubmitModalError] = useState<string | null>(null);
   const [submitForm, setSubmitForm] = useState({
     employeeId: '',
     resignationDate: new Date().toISOString().split('T')[0],
@@ -80,6 +81,7 @@ export const ExitPage: React.FC = () => {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState<boolean>(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState<boolean>(false);
   const [isLwdModalOpen, setIsLwdModalOpen] = useState<boolean>(false);
+  const [actionModalError, setActionModalError] = useState<string | null>(null);
   const [actionRemarks, setActionRemarks] = useState<string>('');
   const [updatedLwd, setUpdatedLwd] = useState<string>('');
 
@@ -199,6 +201,7 @@ export const ExitPage: React.FC = () => {
   // Submit Resignation Handler
   const handleOpenSubmitModal = () => {
     const today = new Date().toISOString().split('T')[0];
+    setSubmitModalError(null);
     setSubmitForm({
       employeeId: activeEmployees[0]?.id || '',
       resignationDate: today,
@@ -211,12 +214,13 @@ export const ExitPage: React.FC = () => {
 
   const handleSubmitResignation = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitModalError(null);
     if (!submitForm.reason.trim()) {
-      setMessage({ text: 'Please provide a valid resignation reason.', type: 'error' });
+      setSubmitModalError('Please provide a valid resignation reason.');
       return;
     }
     if (!submitForm.employeeId) {
-      setMessage({ text: 'Please select an employee.', type: 'error' });
+      setSubmitModalError('Please select an employee.');
       return;
     }
 
@@ -234,7 +238,7 @@ export const ExitPage: React.FC = () => {
       setIsSubmitModalOpen(false);
       loadDashboardData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to submit resignation.', type: 'error' });
+      setSubmitModalError(err.message || 'Failed to submit resignation.');
     } finally {
       setActionLoading(false);
     }
@@ -243,6 +247,7 @@ export const ExitPage: React.FC = () => {
   // Approve Resignation
   const handleApproveResignation = async () => {
     if (!selectedExit) return;
+    setActionModalError(null);
     try {
       setActionLoading(true);
       const updated = await api.approveResignation(selectedExit.id, {
@@ -255,7 +260,7 @@ export const ExitPage: React.FC = () => {
       setMessage({ text: 'Resignation approved. Notice period commenced.', type: 'success' });
       loadDashboardData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to approve resignation.', type: 'error' });
+      setActionModalError(err.message || 'Failed to approve resignation.');
     } finally {
       setActionLoading(false);
     }
@@ -264,8 +269,9 @@ export const ExitPage: React.FC = () => {
   // Reject Resignation
   const handleRejectResignation = async () => {
     if (!selectedExit) return;
+    setActionModalError(null);
     if (!actionRemarks.trim()) {
-      setMessage({ text: 'Rejection remarks are required.', type: 'error' });
+      setActionModalError('Rejection remarks are required.');
       return;
     }
     try {
@@ -277,7 +283,7 @@ export const ExitPage: React.FC = () => {
       setMessage({ text: 'Resignation request rejected.', type: 'success' });
       loadDashboardData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to reject resignation.', type: 'error' });
+      setActionModalError(err.message || 'Failed to reject resignation.');
     } finally {
       setActionLoading(false);
     }
@@ -286,6 +292,7 @@ export const ExitPage: React.FC = () => {
   // Update Last Working Day
   const handleUpdateLwd = async () => {
     if (!selectedExit || !updatedLwd) return;
+    setActionModalError(null);
     try {
       setActionLoading(true);
       const updated = await api.updateLastWorkingDay(selectedExit.id, {
@@ -298,7 +305,7 @@ export const ExitPage: React.FC = () => {
       setMessage({ text: 'Last working day updated successfully.', type: 'success' });
       loadDashboardData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to update last working day.', type: 'error' });
+      setActionModalError(err.message || 'Failed to update last working day.');
     } finally {
       setActionLoading(false);
     }
@@ -307,8 +314,9 @@ export const ExitPage: React.FC = () => {
   // Withdraw Resignation
   const handleWithdrawResignation = async () => {
     if (!selectedExit) return;
+    setActionModalError(null);
     if (!actionRemarks.trim()) {
-      setMessage({ text: 'Please specify the withdrawal reason.', type: 'error' });
+      setActionModalError('Please specify the withdrawal reason.');
       return;
     }
     try {
@@ -320,7 +328,7 @@ export const ExitPage: React.FC = () => {
       setMessage({ text: 'Resignation withdrawn successfully.', type: 'success' });
       loadDashboardData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to withdraw resignation.', type: 'error' });
+      setActionModalError(err.message || 'Failed to withdraw resignation.');
     } finally {
       setActionLoading(false);
     }
@@ -704,148 +712,234 @@ export const ExitPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3 px-4">Employee</th>
-                  <th className="py-3 px-4">Brand / Org</th>
-                  <th className="py-3 px-4">Resignation Date</th>
-                  <th className="py-3 px-4">Last Working Day</th>
-                  <th className="py-3 px-4">Exit Status</th>
-                  <th className="py-3 px-4 text-center">Checklist & Assets</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredRequests.map((exit) => {
-                  const checklistCount = [
-                    exit.handoverCompleted,
-                    exit.tasksHandedOver,
-                    exit.docsHandedOver,
-                    exit.hrClearanceCompleted
-                  ].filter(Boolean).length;
+          <div>
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4 whitespace-nowrap">Employee & Org</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Exit Timeline</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Exit Status</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Clearance Progress</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {filteredRequests.map((exit) => {
+                    const checklistCount = [
+                      exit.handoverCompleted,
+                      exit.tasksHandedOver,
+                      exit.docsHandedOver,
+                      exit.hrClearanceCompleted
+                    ].filter(Boolean).length;
 
-                  return (
-                    <tr
-                      key={exit.id}
-                      className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
-                      onClick={() => handleOpenDetailModal(exit)}
-                    >
-                      {/* Employee Info */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center font-bold text-brand-700 text-xs">
-                            {exit.employee?.firstName?.[0] || 'E'}
-                            {exit.employee?.lastName?.[0] || ''}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-slate-900 block group-hover:text-brand-700 transition-colors">
-                              {exit.employee?.firstName} {exit.employee?.lastName}
-                            </span>
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                              <span className="font-mono">{exit.employee?.employeeId}</span>
-                              <span>•</span>
-                              <span>{exit.employee?.designation?.title || 'Staff'}</span>
+                    return (
+                      <tr
+                        key={exit.id}
+                        className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                        onClick={() => handleOpenDetailModal(exit)}
+                      >
+                        {/* Employee & Brand */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center font-bold text-brand-700 text-xs shrink-0">
+                              {exit.employee?.firstName?.[0] || 'E'}
+                              {exit.employee?.lastName?.[0] || ''}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900 block group-hover:text-brand-700 transition-colors">
+                                {exit.employee?.firstName} {exit.employee?.lastName}
+                              </span>
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                                <span className="font-mono text-slate-500">{exit.employee?.employeeId}</span>
+                                <span>•</span>
+                                <span className="text-slate-600 font-medium">{exit.brand?.name || 'Brand'}</span>
+                                <span>•</span>
+                                <span>{exit.employee?.designation?.title || 'Staff'}</span>
+                              </div>
                             </div>
                           </div>
+                        </td>
+
+                        {/* Exit Timeline */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5 font-semibold text-slate-900">
+                            <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                            <span>LWD: {exit.lastWorkingDay}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Resigned: {exit.resignationDate} ({exit.noticePeriodDays}d notice)
+                          </div>
+                          {exit.status === 'NOTICE_PERIOD' && (
+                            <span className="inline-block mt-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
+                              {exit.remainingNoticeDays} days remaining
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3 px-4">
+                          {renderStatusBadge(
+                            (exit.effectiveStatus || exit.status) as ExitRequestStatus,
+                            exit.remainingNoticeDays
+                          )}
+                        </td>
+
+                        {/* Quick Checklist & Assets Indicator */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1">
+                            <span
+                              title="Exit Checklist completion"
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border w-fit ${
+                                checklistCount === 4
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              Tasks: {checklistCount}/4
+                            </span>
+
+                            <span
+                              title="Asset return clearance"
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border w-fit ${
+                                exit.assetClearanceCompleted
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              Assets: {exit.assetClearanceCompleted ? 'Cleared' : 'Pending'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenDetailModal(exit)}
+                              className="px-2.5 py-1 text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors"
+                            >
+                              Manage Exit
+                            </button>
+
+                            {exit.relievingLetterIssued && (
+                              <button
+                                onClick={() => handleDownloadRelievingLetterPdf(exit.id)}
+                                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                title="Download Relieving Letter PDF"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {filteredRequests.map((exit) => {
+                const checklistCount = [
+                  exit.handoverCompleted,
+                  exit.tasksHandedOver,
+                  exit.docsHandedOver,
+                  exit.hrClearanceCompleted
+                ].filter(Boolean).length;
+
+                return (
+                  <div
+                    key={exit.id}
+                    className="p-4 space-y-3 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                    onClick={() => handleOpenDetailModal(exit)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center font-bold text-brand-700 text-xs shrink-0">
+                          {exit.employee?.firstName?.[0] || 'E'}
+                          {exit.employee?.lastName?.[0] || ''}
                         </div>
-                      </td>
-
-                      {/* Brand */}
-                      <td className="py-3 px-4">
-                        <span className="font-medium text-slate-800 block">
-                          {exit.brand?.name}
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          {exit.employee?.branch?.name || 'Main Office'}
-                        </span>
-                      </td>
-
-                      {/* Resignation Date */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-                          <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{exit.resignationDate}</span>
+                        <div>
+                          <div className="font-semibold text-slate-900 text-sm">
+                            {exit.employee?.firstName} {exit.employee?.lastName}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <span className="font-mono text-slate-500">{exit.employee?.employeeId}</span>
+                            <span>•</span>
+                            <span>{exit.brand?.name}</span>
+                          </div>
                         </div>
-                        <span className="text-[10px] text-slate-400">
-                          Notice: {exit.noticePeriodDays} days
-                        </span>
-                      </td>
-
-                      {/* Last Working Day & Remaining Days */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-900">
-                          <span>{exit.lastWorkingDay}</span>
-                        </div>
-                        {exit.status === 'NOTICE_PERIOD' && (
-                          <span className="inline-block mt-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                            {exit.remainingNoticeDays} days remaining
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3 px-4">
+                      </div>
+                      <div>
                         {renderStatusBadge(
                           (exit.effectiveStatus || exit.status) as ExitRequestStatus,
                           exit.remainingNoticeDays
                         )}
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* Quick Checklist & Assets Indicator */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <span
-                            title="Exit Checklist completion"
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                              checklistCount === 4
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-slate-50 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            Tasks: {checklistCount}/4
+                    {/* Timeline & Clearance Grid */}
+                    <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs">
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-medium">Last Working Day</div>
+                        <div className="font-semibold text-slate-800 mt-0.5">{exit.lastWorkingDay}</div>
+                        {exit.status === 'NOTICE_PERIOD' && (
+                          <div className="text-[10px] text-blue-600 font-medium mt-0.5">
+                            {exit.remainingNoticeDays}d left
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-medium">Clearance</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                            checklistCount === 4
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-white text-slate-600 border-slate-200'
+                          }`}>
+                            {checklistCount}/4 tasks
                           </span>
-
-                          <span
-                            title="Asset return clearance"
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                              exit.assetClearanceCompleted
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
-                          >
-                            Assets: {exit.assetClearanceCompleted ? 'Cleared' : 'Pending'}
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                            exit.assetClearanceCompleted
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {exit.assetClearanceCompleted ? 'Assets OK' : 'Assets Due'}
                           </span>
                         </div>
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] text-slate-400">
+                        Resigned: {exit.resignationDate}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {exit.relievingLetterIssued && (
                           <button
-                            onClick={() => handleOpenDetailModal(exit)}
-                            className="px-2.5 py-1 text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors"
+                            onClick={() => handleDownloadRelievingLetterPdf(exit.id)}
+                            className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Download Relieving Letter PDF"
                           >
-                            Manage Exit
+                            <Download className="w-3.5 h-3.5" />
                           </button>
-
-                          {exit.relievingLetterIssued && (
-                            <button
-                              onClick={() => handleDownloadRelievingLetterPdf(exit.id)}
-                              className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                              title="Download Relieving Letter PDF"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        )}
+                        <button
+                          onClick={() => handleOpenDetailModal(exit)}
+                          className="px-2.5 py-1 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors"
+                        >
+                          Manage Exit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -869,6 +963,20 @@ export const ExitPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmitResignation} className="p-6 space-y-4">
+              {submitModalError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 font-medium">{submitModalError}</div>
+                  <button
+                    type="button"
+                    onClick={() => setSubmitModalError(null)}
+                    className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Employee Selection */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1194,6 +1302,7 @@ export const ExitPage: React.FC = () => {
                         !['REJECTED', 'WITHDRAWN', 'EXIT_COMPLETED'].includes(selectedExit.status) && (
                           <button
                             onClick={() => {
+                              setActionModalError(null);
                               setUpdatedLwd(selectedExit.lastWorkingDay);
                               setIsLwdModalOpen(true);
                             }}
@@ -1248,6 +1357,7 @@ export const ExitPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
+                            setActionModalError(null);
                             setActionRemarks('');
                             setIsRejectModalOpen(true);
                           }}
@@ -1257,6 +1367,7 @@ export const ExitPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => {
+                            setActionModalError(null);
                             setActionRemarks('');
                             setUpdatedLwd(selectedExit.lastWorkingDay);
                             setIsApproveModalOpen(true);
@@ -1274,6 +1385,7 @@ export const ExitPage: React.FC = () => {
                     <div className="pt-2 flex justify-end">
                       <button
                         onClick={() => {
+                          setActionModalError(null);
                           setActionRemarks('');
                           setIsWithdrawModalOpen(true);
                         }}
@@ -1435,16 +1547,16 @@ export const ExitPage: React.FC = () => {
 
                   {/* Assets List */}
                   {assetsData?.assignedAssets && assetsData.assignedAssets.length > 0 ? (
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      <table className="w-full text-left border-collapse text-xs">
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white">
+                      <table className="w-full text-left border-collapse text-xs min-w-[600px]">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-4">Asset Name</th>
-                            <th className="py-2.5 px-4">Asset Tag</th>
-                            <th className="py-2.5 px-4">Type</th>
-                            <th className="py-2.5 px-4">Serial Number</th>
-                            <th className="py-2.5 px-4">Status</th>
-                            <th className="py-2.5 px-4 text-right">Clearance Action</th>
+                            <th className="py-2.5 px-4 whitespace-nowrap">Asset Name</th>
+                            <th className="py-2.5 px-4 whitespace-nowrap">Asset Tag</th>
+                            <th className="py-2.5 px-4 whitespace-nowrap">Type</th>
+                            <th className="py-2.5 px-4 whitespace-nowrap">Serial Number</th>
+                            <th className="py-2.5 px-4 whitespace-nowrap">Status</th>
+                            <th className="py-2.5 px-4 text-right whitespace-nowrap">Clearance Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -1515,10 +1627,10 @@ export const ExitPage: React.FC = () => {
                       <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                         Recent Return History
                       </span>
-                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                        <table className="w-full text-left text-[11px] border-collapse">
+                      <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white">
+                        <table className="w-full text-left text-[11px] border-collapse min-w-[500px]">
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 whitespace-nowrap">
                               <th className="py-2 px-3">Asset</th>
                               <th className="py-2 px-3">Returned Date</th>
                               <th className="py-2 px-3">Condition</th>
@@ -1684,7 +1796,7 @@ export const ExitPage: React.FC = () => {
                     <div className="text-xs leading-relaxed text-justify space-y-3 font-sans">
                       <p>
                         This is to certify that <span className="font-bold">{letterPreview?.employeeName}</span> was employed with{' '}
-                        <span className="font-bold">{letterPreview?.brandName}</span> as {letterPreview?.designation} at our {letterPreview?.branch} office from {letterPreview?.joiningDate} to {letterPreview?.lastWorkingDay}.
+                        <span className="font-bold">{letterPreview?.brandName}</span> as {letterPreview?.designation} from {letterPreview?.joiningDate} to {letterPreview?.lastWorkingDay}.
                       </p>
                       <p>
                         During their tenure with us, they demonstrated diligence, professionalism, and commitment in discharging their duties. Their conduct and character were found to be satisfactory throughout.
@@ -1771,6 +1883,20 @@ export const ExitPage: React.FC = () => {
               Approve resignation for {selectedExit.employee?.firstName} {selectedExit.employee?.lastName}.
             </p>
 
+            {actionModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{actionModalError}</div>
+                <button
+                  type="button"
+                  onClick={() => setActionModalError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Confirmed Last Working Day
@@ -1828,6 +1954,20 @@ export const ExitPage: React.FC = () => {
               Provide formal reason for rejecting resignation for {selectedExit.employee?.firstName} {selectedExit.employee?.lastName}.
             </p>
 
+            {actionModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{actionModalError}</div>
+                <button
+                  type="button"
+                  onClick={() => setActionModalError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Rejection Remarks <span className="text-rose-500">*</span>
@@ -1873,6 +2013,20 @@ export const ExitPage: React.FC = () => {
             <p className="text-xs text-slate-500">
               Adjust the official relieving date and recalculate remaining notice days.
             </p>
+
+            {actionModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{actionModalError}</div>
+                <button
+                  type="button"
+                  onClick={() => setActionModalError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1931,6 +2085,20 @@ export const ExitPage: React.FC = () => {
             <p className="text-xs text-slate-500">
               Confirm cancellation of exit request. Records will be updated to Withdrawn status.
             </p>
+
+            {actionModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{actionModalError}</div>
+                <button
+                  type="button"
+                  onClick={() => setActionModalError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">

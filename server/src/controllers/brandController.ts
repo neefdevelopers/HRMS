@@ -45,7 +45,6 @@ export const getBrands = async (req: AuthenticatedRequest, res: Response) => {
         _count: {
           select: {
             employees: true,
-            branches: true,
             departments: true
           }
         }
@@ -75,7 +74,6 @@ export const getBrandById = async (req: AuthenticatedRequest, res: Response) => 
             isActive: true
           }
         },
-        branches: true,
         departments: true,
         shifts: true,
         _count: {
@@ -187,12 +185,45 @@ export const createBrand = async (req: AuthenticatedRequest, res: Response) => {
         _count: {
           select: {
             employees: true,
-            branches: true,
             departments: true
           }
         }
       }
     });
+
+    // Auto-provision default Department, Designation, and Shift for the brand
+    try {
+      const defaultDept = await prisma.department.create({
+        data: {
+          name: 'General',
+          code: 'GEN',
+          brandId: brand.id
+        }
+      });
+
+      await prisma.designation.create({
+        data: {
+          title: 'General Staff',
+          code: 'STAFF',
+          brandId: brand.id,
+          departmentId: defaultDept.id
+        }
+      });
+
+      await prisma.shift.create({
+        data: {
+          name: 'General Shift',
+          code: `GS-${brand.code}`,
+          brandId: brand.id,
+          startTime: '09:00',
+          endTime: '18:00',
+          weeklyOff: 'SUNDAY',
+          breakMinutes: 60
+        }
+      });
+    } catch (provisionErr: any) {
+      console.warn('[BrandController] Warning provisioning defaults for brand:', provisionErr.message);
+    }
 
     // Record audit
     await prisma.auditLog.create({
@@ -296,7 +327,6 @@ export const updateBrand = async (req: AuthenticatedRequest, res: Response) => {
         _count: {
           select: {
             employees: true,
-            branches: true,
             departments: true
           }
         }
@@ -367,7 +397,6 @@ export const toggleBrandStatus = async (req: AuthenticatedRequest, res: Response
         _count: {
           select: {
             employees: true,
-            branches: true,
             departments: true
           }
         }
@@ -400,34 +429,6 @@ export const toggleBrandStatus = async (req: AuthenticatedRequest, res: Response
   }
 };
 
-export const getBranches = async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const brandId = (req.query.brandId as string) || req.effectiveBrandId;
-    const effectiveCompanyId = req.effectiveCompanyId;
-    const queryCompanyId = req.query.companyId as string | undefined;
-
-    const whereClause: any = {};
-
-    const companyFilter = effectiveCompanyId || (req.user?.role === Role.ADMIN && queryCompanyId && queryCompanyId !== 'all' ? queryCompanyId : undefined);
-    if (companyFilter) {
-      whereClause.brand = { companyId: companyFilter };
-    }
-
-    if (brandId && brandId !== 'all') {
-      whereClause.brandId = brandId;
-    }
-
-    const branches = await prisma.branch.findMany({
-      where: whereClause,
-      include: { brand: true, _count: { select: { employees: true } } },
-      orderBy: { name: 'asc' }
-    });
-
-    return sendSuccess(res, branches);
-  } catch (error: any) {
-    return sendError(res, error.message || 'Failed to fetch branches', 500);
-  }
-};
 
 export const getDepartments = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -449,9 +450,19 @@ export const getDepartments = async (req: AuthenticatedRequest, res: Response) =
     const departments = await prisma.department.findMany({
       where: whereClause,
       include: {
-        brand: true,
-        designations: true,
-        _count: { select: { employees: true } }
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        designations: {
+          select: { id: true, title: true, code: true, isActive: true }
+        },
+        _count: { select: { employees: true, designations: true } }
       },
       orderBy: { name: 'asc' }
     });
@@ -462,9 +473,184 @@ export const getDepartments = async (req: AuthenticatedRequest, res: Response) =
   }
 };
 
+export const createDepartment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { name, code: inputCode, brandId, description } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return sendError(res, 'Department name is required.', 400);
+    }
+    if (!brandId || typeof brandId !== 'string') {
+      return sendError(res, 'Brand selection is required.', 400);
+    }
+
+    const brand = await prisma.brand.findUnique({
+      where: { id: brandId },
+      include: { company: true }
+    });
+    if (!brand) {
+      return sendError(res, 'Selected brand does not exist.', 404);
+    }
+
+    // Company isolation check
+    if (req.user?.role !== Role.ADMIN && brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Brand belongs to another company.', 403);
+    }
+
+    // Generate unique code if not provided
+    let rawCode = (inputCode || name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()) || 'DEPT';
+    rawCode = rawCode.trim().toUpperCase();
+
+    let finalCode = rawCode;
+    let suffix = 1;
+    while (await prisma.department.findUnique({ where: { brandId_code: { brandId, code: finalCode } } })) {
+      finalCode = `${rawCode.slice(0, 5)}${suffix++}`;
+    }
+
+    const department = await prisma.department.create({
+      data: {
+        name: name.trim(),
+        code: finalCode,
+        brandId,
+        description: description ? description.trim() : null
+      },
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        designations: true,
+        _count: { select: { employees: true, designations: true } }
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'CREATE',
+        entityType: 'Department',
+        entityId: department.id,
+        brandId,
+        companyId: brand.companyId,
+        changesJson: JSON.stringify({ name: department.name, code: department.code })
+      }
+    });
+
+    return sendSuccess(res, department, `Department "${department.name}" created successfully.`, undefined, 201);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to create department', 500);
+  }
+};
+
+export const updateDepartment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, code, description, isActive } = req.body;
+
+    const existing = await prisma.department.findUnique({
+      where: { id },
+      include: { brand: true }
+    });
+    if (!existing) {
+      return sendError(res, 'Department not found.', 404);
+    }
+
+    if (req.user?.role !== Role.ADMIN && existing.brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Department belongs to another company.', 403);
+    }
+
+    const data: any = {};
+    if (name !== undefined) data.name = name.trim();
+    if (code !== undefined) data.code = code.trim().toUpperCase();
+    if (description !== undefined) data.description = description ? description.trim() : null;
+    if (isActive !== undefined) data.isActive = Boolean(isActive);
+
+    const updated = await prisma.department.update({
+      where: { id },
+      data,
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        designations: true,
+        _count: { select: { employees: true, designations: true } }
+      }
+    });
+
+    return sendSuccess(res, updated, `Department "${updated.name}" updated successfully.`);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to update department', 500);
+  }
+};
+
+export const deleteDepartment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const department = await prisma.department.findUnique({
+      where: { id },
+      include: {
+        brand: true,
+        _count: { select: { employees: true, designations: true } }
+      }
+    });
+
+    if (!department) {
+      return sendError(res, 'Department not found.', 404);
+    }
+
+    if (req.user?.role !== Role.ADMIN && department.brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Department belongs to another company.', 403);
+    }
+
+    if (department._count.employees > 0) {
+      return sendError(
+        res,
+        `Cannot delete department "${department.name}" because ${department._count.employees} employee(s) are actively assigned to it. Please reassign the employees first or deactivate the department.`,
+        400
+      );
+    }
+
+    // Unlink designations from this department
+    await prisma.designation.updateMany({
+      where: { departmentId: id },
+      data: { departmentId: null }
+    });
+
+    await prisma.department.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'DELETE',
+        entityType: 'Department',
+        entityId: id,
+        brandId: department.brandId,
+        companyId: department.brand.companyId,
+        changesJson: JSON.stringify({ name: department.name, code: department.code })
+      }
+    });
+
+    return sendSuccess(res, null, `Department "${department.name}" deleted successfully.`);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to delete department', 500);
+  }
+};
+
 export const getDesignations = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const brandId = (req.query.brandId as string) || req.effectiveBrandId;
+    const departmentId = req.query.departmentId as string | undefined;
     const effectiveCompanyId = req.effectiveCompanyId;
     const queryCompanyId = req.query.companyId as string | undefined;
 
@@ -479,15 +665,210 @@ export const getDesignations = async (req: AuthenticatedRequest, res: Response) 
       whereClause.brandId = brandId;
     }
 
+    if (departmentId && departmentId !== 'all') {
+      whereClause.departmentId = departmentId;
+    }
+
     const designations = await prisma.designation.findMany({
       where: whereClause,
-      include: { brand: true, department: true },
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        department: { select: { id: true, name: true, code: true } },
+        _count: { select: { employees: true } }
+      },
       orderBy: { title: 'asc' }
     });
 
     return sendSuccess(res, designations);
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to fetch designations', 500);
+  }
+};
+
+export const createDesignation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { title, code: inputCode, brandId, departmentId, description } = req.body;
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return sendError(res, 'Designation title is required.', 400);
+    }
+    if (!brandId || typeof brandId !== 'string') {
+      return sendError(res, 'Brand selection is required.', 400);
+    }
+
+    const brand = await prisma.brand.findUnique({
+      where: { id: brandId },
+      include: { company: true }
+    });
+    if (!brand) {
+      return sendError(res, 'Selected brand does not exist.', 404);
+    }
+
+    // Company isolation check
+    if (req.user?.role !== Role.ADMIN && brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Brand belongs to another company.', 403);
+    }
+
+    // Verify department if provided
+    let validDepartmentId: string | null = null;
+    if (departmentId) {
+      const dept = await prisma.department.findUnique({ where: { id: departmentId } });
+      if (dept && dept.brandId === brandId) {
+        validDepartmentId = dept.id;
+      }
+    }
+
+    // Generate unique code if not provided
+    let rawCode = (inputCode || title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()) || 'DESIG';
+    rawCode = rawCode.trim().toUpperCase();
+
+    let finalCode = rawCode;
+    let suffix = 1;
+    while (await prisma.designation.findUnique({ where: { brandId_code: { brandId, code: finalCode } } })) {
+      finalCode = `${rawCode.slice(0, 5)}${suffix++}`;
+    }
+
+    const designation = await prisma.designation.create({
+      data: {
+        title: title.trim(),
+        code: finalCode,
+        brandId,
+        departmentId: validDepartmentId,
+        description: description ? description.trim() : null
+      },
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        department: { select: { id: true, name: true, code: true } },
+        _count: { select: { employees: true } }
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'CREATE',
+        entityType: 'Designation',
+        entityId: designation.id,
+        brandId,
+        companyId: brand.companyId,
+        changesJson: JSON.stringify({ title: designation.title, code: designation.code })
+      }
+    });
+
+    return sendSuccess(res, designation, `Designation "${designation.title}" created successfully.`, undefined, 201);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to create designation', 500);
+  }
+};
+
+export const updateDesignation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { title, code, departmentId, description, isActive } = req.body;
+
+    const existing = await prisma.designation.findUnique({
+      where: { id },
+      include: { brand: true }
+    });
+    if (!existing) {
+      return sendError(res, 'Designation not found.', 404);
+    }
+
+    if (req.user?.role !== Role.ADMIN && existing.brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Designation belongs to another company.', 403);
+    }
+
+    const data: any = {};
+    if (title !== undefined) data.title = title.trim();
+    if (code !== undefined) data.code = code.trim().toUpperCase();
+    if (departmentId !== undefined) data.departmentId = departmentId || null;
+    if (description !== undefined) data.description = description ? description.trim() : null;
+    if (isActive !== undefined) data.isActive = Boolean(isActive);
+
+    const updated = await prisma.designation.update({
+      where: { id },
+      data,
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            companyId: true,
+            company: { select: { id: true, name: true, code: true } }
+          }
+        },
+        department: { select: { id: true, name: true, code: true } },
+        _count: { select: { employees: true } }
+      }
+    });
+
+    return sendSuccess(res, updated, `Designation "${updated.title}" updated successfully.`);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to update designation', 500);
+  }
+};
+
+export const deleteDesignation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const designation = await prisma.designation.findUnique({
+      where: { id },
+      include: {
+        brand: true,
+        _count: { select: { employees: true } }
+      }
+    });
+
+    if (!designation) {
+      return sendError(res, 'Designation not found.', 404);
+    }
+
+    if (req.user?.role !== Role.ADMIN && designation.brand.companyId !== req.effectiveCompanyId) {
+      return sendError(res, 'Access denied. Designation belongs to another company.', 403);
+    }
+
+    if (designation._count.employees > 0) {
+      return sendError(
+        res,
+        `Cannot delete designation "${designation.title}" because ${designation._count.employees} employee(s) are actively holding it. Please reassign the employees first or deactivate the designation.`,
+        400
+      );
+    }
+
+    await prisma.designation.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id,
+        action: 'DELETE',
+        entityType: 'Designation',
+        entityId: id,
+        brandId: designation.brandId,
+        companyId: designation.brand.companyId,
+        changesJson: JSON.stringify({ title: designation.title, code: designation.code })
+      }
+    });
+
+    return sendSuccess(res, null, `Designation "${designation.title}" deleted successfully.`);
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to delete designation', 500);
   }
 };
 

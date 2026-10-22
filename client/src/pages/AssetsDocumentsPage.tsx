@@ -35,7 +35,9 @@ import {
   FileCheck,
   FileWarning,
   AlertTriangle,
-  FolderSync
+  FolderSync,
+  Loader2,
+  X
 } from 'lucide-react';
 
 const DOCUMENT_TYPES = [
@@ -61,7 +63,7 @@ export interface AssetsDocumentsPageProps {
 }
 
 export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode = 'all' }) => {
-  const { selectedBrandId } = useBrand();
+  const { selectedBrandId, brands } = useBrand();
   const { activeCompanyId } = useCompany();
   const { user } = useAuth();
   const isHrOrAdmin = user?.role === 'ADMIN' || user?.role === 'HR';
@@ -86,6 +88,8 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   // Asset Modals
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [assetFormError, setAssetFormError] = useState<string | null>(null);
+  const [assetSubmitting, setAssetSubmitting] = useState(false);
   const [assetForm, setAssetForm] = useState<{
     name: string;
     type: string;
@@ -95,6 +99,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
     purchaseDate: string;
     status: AssetStatus;
     notes: string;
+    brandId: string;
   }>({
     name: '',
     type: 'LAPTOP',
@@ -103,19 +108,42 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
     brandModel: '',
     purchaseDate: '',
     status: 'AVAILABLE',
-    notes: ''
+    notes: '',
+    brandId: ''
   });
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedAssetForAssign, setSelectedAssetForAssign] = useState<Asset | null>(null);
+  const [assignFormError, setAssignFormError] = useState<string | null>(null);
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [assignForm, setAssignForm] = useState({
     employeeId: '',
     assignedDate: new Date().toISOString().slice(0, 10),
     notes: ''
   });
+  const [assignEmployeeSearch, setAssignEmployeeSearch] = useState('');
+
+  const filteredAssignEmployees = useMemo(() => {
+    if (!assignEmployeeSearch.trim()) return employees;
+    const q = assignEmployeeSearch.toLowerCase().trim();
+    return employees.filter(emp => {
+      const name = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
+      const empId = (emp.employeeId || '').toLowerCase();
+      const dept = (emp.department?.name || '').toLowerCase();
+      const desig = (emp.designation?.title || '').toLowerCase();
+      const brand = (emp.brand?.name || '').toLowerCase();
+      return name.includes(q) || empId.includes(q) || dept.includes(q) || desig.includes(q) || brand.includes(q);
+    });
+  }, [employees, assignEmployeeSearch]);
+
+  const selectedAssignEmployee = useMemo(() => {
+    return employees.find(e => e.id === assignForm.employeeId) || null;
+  }, [employees, assignForm.employeeId]);
 
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [selectedAssetForReturn, setSelectedAssetForReturn] = useState<Asset | null>(null);
+  const [returnFormError, setReturnFormError] = useState<string | null>(null);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
   const [returnForm, setReturnForm] = useState({
     returnedDate: new Date().toISOString().slice(0, 10),
     conditionOnReturn: 'GOOD',
@@ -134,6 +162,8 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   // Document Modals
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<CompanyDocument | null>(null);
+  const [docFormError, setDocFormError] = useState<string | null>(null);
+  const [docSubmitting, setDocSubmitting] = useState(false);
   const [docForm, setDocForm] = useState({
     employeeId: '',
     documentType: 'CONTRACT',
@@ -149,6 +179,8 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
 
   const [isReplaceModalOpen, setIsReplaceModalOpen] = useState(false);
   const [selectedDocForReplace, setSelectedDocForReplace] = useState<CompanyDocument | null>(null);
+  const [replaceFormError, setReplaceFormError] = useState<string | null>(null);
+  const [replaceSubmitting, setReplaceSubmitting] = useState(false);
   const [replaceForm, setReplaceForm] = useState({
     title: '',
     fileName: '',
@@ -263,6 +295,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   // ============================================================
   const openCreateAssetModal = () => {
     setEditingAsset(null);
+    setAssetFormError(null);
     setAssetForm({
       name: '',
       type: 'LAPTOP',
@@ -271,13 +304,15 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
       brandModel: '',
       purchaseDate: '',
       status: 'AVAILABLE',
-      notes: ''
+      notes: '',
+      brandId: selectedBrandId !== 'all' ? selectedBrandId : (brands[0]?.id || '')
     });
     setIsAssetModalOpen(true);
   };
 
   const openEditAssetModal = (asset: Asset) => {
     setEditingAsset(asset);
+    setAssetFormError(null);
     setAssetForm({
       name: asset.name,
       type: asset.type,
@@ -286,28 +321,42 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
       brandModel: asset.brandModel || '',
       purchaseDate: asset.purchaseDate || '',
       status: asset.status,
-      notes: asset.notes || ''
+      notes: asset.notes || '',
+      brandId: asset.brandId || ''
     });
     setIsAssetModalOpen(true);
   };
 
   const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAssetFormError(null);
+    setAssetSubmitting(true);
     try {
+      const targetBrandId = assetForm.brandId || (selectedBrandId !== 'all' ? selectedBrandId : brands[0]?.id);
+      if (!editingAsset && !targetBrandId) {
+        setAssetFormError('Please select a brand for this asset.');
+        setAssetSubmitting(false);
+        return;
+      }
       if (editingAsset) {
-        await api.updateAsset(editingAsset.id, assetForm);
+        await api.updateAsset(editingAsset.id, {
+          ...assetForm,
+          brandId: targetBrandId
+        });
         showNotification(`Asset "${assetForm.name}" updated successfully.`);
       } else {
         await api.createAsset({
           ...assetForm,
-          brandId: selectedBrandId !== 'all' ? selectedBrandId : undefined
+          brandId: targetBrandId
         });
         showNotification(`Asset "${assetForm.name}" added successfully.`);
       }
       setIsAssetModalOpen(false);
       loadAssets();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to save asset', true);
+      setAssetFormError(err.message || 'Failed to save asset. Please check the inputs.');
+    } finally {
+      setAssetSubmitting(false);
     }
   };
 
@@ -329,6 +378,8 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
 
   const openAssignModal = (asset: Asset) => {
     setSelectedAssetForAssign(asset);
+    setAssignFormError(null);
+    setAssignEmployeeSearch('');
     setAssignForm({
       employeeId: '',
       assignedDate: new Date().toISOString().slice(0, 10),
@@ -339,20 +390,28 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
 
   const handleAssignAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAssetForAssign || !assignForm.employeeId) return;
+    if (!selectedAssetForAssign || !assignForm.employeeId) {
+      setAssignFormError('Please select an employee.');
+      return;
+    }
 
+    setAssignFormError(null);
+    setAssignSubmitting(true);
     try {
       await api.assignAsset(selectedAssetForAssign.id, assignForm);
       showNotification(`Asset assigned successfully.`);
       setIsAssignModalOpen(false);
       loadAssets();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to assign asset', true);
+      setAssignFormError(err.message || 'Failed to assign asset.');
+    } finally {
+      setAssignSubmitting(false);
     }
   };
 
   const openReturnModal = (asset: Asset) => {
     setSelectedAssetForReturn(asset);
+    setReturnFormError(null);
     setReturnForm({
       returnedDate: new Date().toISOString().slice(0, 10),
       conditionOnReturn: 'GOOD',
@@ -365,13 +424,17 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
     e.preventDefault();
     if (!selectedAssetForReturn) return;
 
+    setReturnFormError(null);
+    setReturnSubmitting(true);
     try {
       await api.returnAsset(selectedAssetForReturn.id, returnForm);
       showNotification(`Asset returned and marked as ${returnForm.conditionOnReturn === 'DAMAGED' ? 'Damaged' : 'Available'}.`);
       setIsReturnModalOpen(false);
       loadAssets();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to return asset', true);
+      setReturnFormError(err.message || 'Failed to return asset.');
+    } finally {
+      setReturnSubmitting(false);
     }
   };
 
@@ -429,6 +492,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
 
   const openCreateDocModal = () => {
     setEditingDoc(null);
+    setDocFormError(null);
     setDocForm({
       employeeId: employees[0]?.id || '',
       documentType: 'CONTRACT',
@@ -446,6 +510,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
 
   const openEditDocModal = (doc: CompanyDocument) => {
     setEditingDoc(doc);
+    setDocFormError(null);
     setDocForm({
       employeeId: doc.employeeId,
       documentType: doc.documentType,
@@ -464,10 +529,12 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   const handleSaveDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDoc && !docForm.fileUrl) {
-      showNotification('Please select a document file to upload.', true);
+      setDocFormError('Please select a document file to upload.');
       return;
     }
 
+    setDocFormError(null);
+    setDocSubmitting(true);
     try {
       if (editingDoc) {
         await api.updateCompanyDocument(editingDoc.id, {
@@ -488,12 +555,15 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
       setIsDocModalOpen(false);
       loadDocuments();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to save document', true);
+      setDocFormError(err.message || 'Failed to save document. Please check the inputs.');
+    } finally {
+      setDocSubmitting(false);
     }
   };
 
   const openReplaceModal = (doc: CompanyDocument) => {
     setSelectedDocForReplace(doc);
+    setReplaceFormError(null);
     setReplaceForm({
       title: doc.title,
       fileName: '',
@@ -510,10 +580,12 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
   const handleReplaceDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDocForReplace || !replaceForm.fileUrl) {
-      showNotification('Please attach the new replacement file.', true);
+      setReplaceFormError('Please attach the new replacement file.');
       return;
     }
 
+    setReplaceFormError(null);
+    setReplaceSubmitting(true);
     try {
       await api.replaceCompanyDocument(selectedDocForReplace.id, replaceForm);
       showNotification(`Document "${selectedDocForReplace.title}" replaced. Previous version archived safely.`);
@@ -521,7 +593,9 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
       loadDocuments();
       if (activeTab === 'reminders') loadExpirySummary();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to replace document', true);
+      setReplaceFormError(err.message || 'Failed to replace document.');
+    } finally {
+      setReplaceSubmitting(false);
     }
   };
 
@@ -831,33 +905,29 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </div>
           </div>
 
-          {/* Assets Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          {/* Assets Desktop / Tablet Table */}
+          <div className="hidden sm:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Asset ID / Tag</th>
-                    <th className="py-3 px-4">Asset Details</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Serial No.</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Currently Held By</th>
-                    <th className="py-3 px-4">Assigned Date</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Asset &amp; Specifications</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Currently Assigned To</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {loading && assets.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-brand-600" />
                         Loading company assets...
                       </td>
                     </tr>
                   ) : filteredAssets.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
                         No assets found matching your criteria.
                       </td>
                     </tr>
@@ -865,43 +935,36 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                     filteredAssets.map(asset => {
                       return (
                         <tr key={asset.id} className="hover:bg-slate-50/70 transition-colors">
-                          {/* Tag */}
-                          <td className="py-3.5 px-4">
-                            <span className="font-mono font-bold text-slate-900 bg-slate-100 border border-slate-200 px-2 py-1 rounded text-[11px]">
-                              {asset.assetTag}
-                            </span>
-                          </td>
-
-                          {/* Name & Model */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-semibold text-slate-900">{asset.name}</div>
-                            {asset.brandModel && (
-                              <div className="text-[11px] text-slate-500">{asset.brandModel}</div>
-                            )}
-                            {asset.purchaseDate && (
-                              <div className="text-[10px] text-slate-400">
-                                Purchased: {asset.purchaseDate}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Type */}
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-1.5">
-                              {getAssetTypeIcon(asset.type)}
-                              <span className="font-medium text-slate-700">
-                                {ASSET_TYPES.find(t => t.value === asset.type)?.label || asset.type}
+                          {/* Asset Name, Tag, Type, and Model */}
+                          <td className="py-3.5 px-4 min-w-[200px]">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900">{asset.name}</span>
+                              <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-[10px]">
+                                {asset.assetTag}
                               </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                              <div className="flex items-center gap-1 text-slate-700 font-medium">
+                                {getAssetTypeIcon(asset.type)}
+                                <span>{ASSET_TYPES.find(t => t.value === asset.type)?.label || asset.type}</span>
+                              </div>
+                              {asset.brandModel && (
+                                <>
+                                  <span>•</span>
+                                  <span>{asset.brandModel}</span>
+                                </>
+                              )}
+                              {asset.serialNumber && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-mono text-slate-400">SN: {asset.serialNumber}</span>
+                                </>
+                              )}
                             </div>
                           </td>
 
-                          {/* Serial */}
-                          <td className="py-3.5 px-4 font-mono text-slate-600 text-[11px]">
-                            {asset.serialNumber || '—'}
-                          </td>
-
                           {/* Status */}
-                          <td className="py-3.5 px-4">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
                             {asset.status === 'AVAILABLE' && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -922,15 +985,21 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                             )}
                           </td>
 
-                          {/* Currently Held By */}
+                          {/* Currently Held By & Assigned Date */}
                           <td className="py-3.5 px-4">
                             {asset.assignedEmployee ? (
                               <div>
                                 <div className="font-semibold text-slate-900">
                                   {asset.assignedEmployee.firstName} {asset.assignedEmployee.lastName}
                                 </div>
-                                <div className="text-[10px] text-slate-400 font-mono">
-                                  {asset.assignedEmployee.employeeId} • {asset.assignedEmployee.department?.name || 'General'}
+                                <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                                  <span>{asset.assignedEmployee.employeeId}</span>
+                                  {asset.assignedDate && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-slate-400">Since {asset.assignedDate}</span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             ) : (
@@ -938,19 +1007,14 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                             )}
                           </td>
 
-                          {/* Assigned Date */}
-                          <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
-                            {asset.assignedDate || '—'}
-                          </td>
-
                           {/* Actions */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="inline-flex items-center gap-1">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
                               {/* Assign Button */}
                               {isHrOrAdmin && asset.status !== 'ASSIGNED' && (
                                 <button
                                   onClick={() => openAssignModal(asset)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md font-semibold text-[11px] border border-brand-200 transition-colors"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md font-semibold text-[11px] border border-brand-200 transition-colors shadow-2xs"
                                   title="Assign to Employee"
                                 >
                                   <UserCheck className="w-3.5 h-3.5" />
@@ -962,7 +1026,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                               {isHrOrAdmin && asset.status === 'ASSIGNED' && (
                                 <button
                                   onClick={() => openReturnModal(asset)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-md font-semibold text-[11px] border border-amber-200 transition-colors"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-md font-semibold text-[11px] border border-amber-200 transition-colors shadow-2xs"
                                   title="Return Asset"
                                 >
                                   <UserX className="w-3.5 h-3.5" />
@@ -1009,6 +1073,118 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Assets Mobile Card View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {loading && assets.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                Loading company assets...
+              </div>
+            ) : filteredAssets.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                No assets found matching your criteria.
+              </div>
+            ) : (
+              filteredAssets.map(asset => (
+                <div
+                  key={asset.id}
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900">{asset.name}</span>
+                        <span className="font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-[10px]">
+                          {asset.assetTag}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                        {getAssetTypeIcon(asset.type)}
+                        <span>{asset.brandModel || asset.type}</span>
+                      </div>
+                    </div>
+                    {asset.status === 'AVAILABLE' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Available
+                      </span>
+                    )}
+                    {asset.status === 'ASSIGNED' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        Assigned
+                      </span>
+                    )}
+                    {asset.status === 'DAMAGED' && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        Damaged
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg text-[11px]">
+                    <span className="text-slate-400 text-[10px] block">Custodian</span>
+                    {asset.assignedEmployee ? (
+                      <div className="font-semibold text-slate-800">
+                        {asset.assignedEmployee.firstName} {asset.assignedEmployee.lastName} ({asset.assignedEmployee.employeeId})
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic">In Storage / Unassigned</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openHistoryModal(asset)}
+                        className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"
+                        title="Assignment History"
+                      >
+                        <History className="w-4 h-4" />
+                      </button>
+                      {isHrOrAdmin && (
+                        <button
+                          onClick={() => openEditAssetModal(asset)}
+                          className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isHrOrAdmin && asset.status !== 'ASSIGNED' && (
+                        <button
+                          onClick={() => handleDeleteAsset(asset)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-md"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      {isHrOrAdmin && asset.status !== 'ASSIGNED' && (
+                        <button
+                          onClick={() => openAssignModal(asset)}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-brand-600 text-white rounded-lg font-semibold text-xs shadow-xs"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>Assign</span>
+                        </button>
+                      )}
+                      {isHrOrAdmin && asset.status === 'ASSIGNED' && (
+                        <button
+                          onClick={() => openReturnModal(asset)}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded-lg font-semibold text-xs shadow-xs"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                          <span>Return</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -1087,17 +1263,17 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
           {/* Documents Table */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse min-w-[780px]">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Document Title</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Attachment</th>
-                    <th className="py-3 px-4">Issue Date</th>
-                    <th className="py-3 px-4">Expiry Date</th>
-                    <th className="py-3 px-4">Remarks</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Employee</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Document Title</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Type</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Attachment</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Issue Date</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Expiry Date</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Remarks</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1398,32 +1574,29 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             )}
           </div>
 
-          {/* Reminders Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          {/* Reminders Desktop / Tablet Table */}
+          <div className="hidden sm:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Document Title & Type</th>
-                    <th className="py-3 px-4">Expiry Date</th>
-                    <th className="py-3 px-4">Time Left / Status</th>
-                    <th className="py-3 px-4">Automated Reminder</th>
-                    <th className="py-3 px-4">Attachment</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Employee</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Document &amp; File</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Expiry Schedule &amp; Alert Status</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {loading && !expirySummary ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-brand-600" />
                         Analyzing document expiration schedules...
                       </td>
                     </tr>
                   ) : filteredReminders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
                         No documents matching the selected expiry reminder filter.
                       </td>
                     </tr>
@@ -1433,7 +1606,7 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                       return (
                         <tr key={doc.id} className="hover:bg-slate-50/70 transition-colors">
                           {/* Employee */}
-                          <td className="py-3.5 px-4">
+                          <td className="py-3.5 px-4 whitespace-nowrap">
                             <div className="font-semibold text-slate-900">
                               {doc.employee?.firstName} {doc.employee?.lastName}
                             </div>
@@ -1442,91 +1615,92 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                             </div>
                           </td>
 
-                          {/* Title & Type */}
+                          {/* Title, Type & File */}
                           <td className="py-3.5 px-4">
                             <div className="font-semibold text-slate-900">{doc.title}</div>
-                            <div className="mt-1">{getDocTypeBadge(doc.documentType)}</div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {getDocTypeBadge(doc.documentType)}
+                              {doc.fileUrl && (
+                                <a
+                                  href={doc.fileUrl}
+                                  download={doc.fileName}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-mono text-brand-700 hover:underline text-[10px] truncate max-w-[150px] inline-flex items-center gap-1"
+                                >
+                                  <Download className="w-3 h-3 text-slate-400" />
+                                  <span>{doc.fileName}</span>
+                                </a>
+                              )}
+                            </div>
                           </td>
 
-                          {/* Expiry Date */}
-                          <td className="py-3.5 px-4 font-mono font-bold text-slate-800 text-[11px]">
-                            {doc.expiryDate}
-                          </td>
-
-                          {/* Days Left Status Badge */}
+                          {/* Expiry Date, Days Left & Reminder Status */}
                           <td className="py-3.5 px-4">
-                            {days < 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                                Expired {Math.abs(days)} day{Math.abs(days) === 1 ? '' : 's'} ago
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono font-bold text-slate-800 text-[11px]">
+                                {doc.expiryDate}
                               </span>
-                            ) : days <= 7 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                                Expiring in {days} day{days === 1 ? '' : 's'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                                <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                Expiring in {days} days
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Reminder Status */}
-                          <td className="py-3.5 px-4">
-                            {doc.reminder7Sent ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                <Check className="w-3 h-3 text-rose-600" />
-                                7-Day Alert Sent
-                              </span>
-                            ) : doc.reminder30Sent ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                <Check className="w-3 h-3 text-amber-600" />
-                                30-Day Alert Sent
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic">
-                                Reminder Scheduled
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Attachment Link */}
-                          <td className="py-3.5 px-4">
-                            <a
-                              href={doc.fileUrl}
-                              download={doc.fileName}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-mono text-brand-700 hover:underline max-w-[150px] truncate block text-[11px]"
-                            >
-                              {doc.fileName}
-                            </a>
+                              {days < 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                  <AlertCircle className="w-3 h-3 text-rose-600" />
+                                  Expired {Math.abs(days)}d ago
+                                </span>
+                              ) : days <= 7 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                  Expiring in {days}d
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                  <Clock className="w-3 h-3 text-blue-600" />
+                                  Expiring in {days}d
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1">
+                              {doc.reminder7Sent ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                                  <Check className="w-2.5 h-2.5 text-rose-600" />
+                                  7-Day Alert Sent
+                                </span>
+                              ) : doc.reminder30Sent ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                  <Check className="w-2.5 h-2.5 text-amber-600" />
+                                  30-Day Alert Sent
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 italic">
+                                  Reminder Scheduled
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <a
-                                href={doc.fileUrl}
-                                download={doc.fileName}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-md transition-colors"
-                                title="Download Document"
-                              >
-                                <Download className="w-4 h-4" />
-                              </a>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              {doc.fileUrl && (
+                                <a
+                                  href={doc.fileUrl}
+                                  download={doc.fileName}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-md transition-colors"
+                                  title="Download Document"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
 
                               {isHrOrAdmin && (
                                 <button
                                   onClick={() => openReplaceModal(doc)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md font-semibold text-[11px] border border-brand-200 transition-colors"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md font-semibold text-[11px] border border-brand-200 transition-colors shadow-2xs"
                                   title="Renew / Replace Document"
                                 >
                                   <FolderSync className="w-3.5 h-3.5" />
-                                  <span>Renew Document</span>
+                                  <span>Renew</span>
                                 </button>
                               )}
                             </div>
@@ -1538,6 +1712,97 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Reminders Mobile Card View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {loading && !expirySummary ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                Analyzing document expiration schedules...
+              </div>
+            ) : filteredReminders.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                No documents matching the selected filter.
+              </div>
+            ) : (
+              filteredReminders.map(doc => {
+                const days = doc.daysUntilExpiry ?? 0;
+                return (
+                  <div
+                    key={doc.id}
+                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-slate-900">{doc.title}</div>
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          {doc.employee?.firstName} {doc.employee?.lastName} ({doc.employee?.employeeId})
+                        </div>
+                      </div>
+                      {getDocTypeBadge(doc.documentType)}
+                    </div>
+
+                    <div className="p-2.5 bg-slate-50 rounded-lg flex items-center justify-between text-[11px]">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Expiry Date</span>
+                        <span className="font-mono font-bold text-slate-800">{doc.expiryDate}</span>
+                      </div>
+                      <div>
+                        {days < 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                            Expired {Math.abs(days)}d ago
+                          </span>
+                        ) : days <= 7 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            {days} days left
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                            {days} days left
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                      <div>
+                        {doc.reminder7Sent ? (
+                          <span className="text-[10px] font-semibold text-rose-700">7-Day Alert Sent</span>
+                        ) : doc.reminder30Sent ? (
+                          <span className="text-[10px] font-semibold text-amber-700">30-Day Alert Sent</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Reminder Scheduled</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {doc.fileUrl && (
+                          <a
+                            href={doc.fileUrl}
+                            download={doc.fileName}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-md"
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
+                        )}
+                        {isHrOrAdmin && (
+                          <button
+                            onClick={() => openReplaceModal(doc)}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-brand-600 text-white rounded-lg font-semibold text-xs shadow-xs"
+                          >
+                            <FolderSync className="w-3.5 h-3.5" />
+                            <span>Renew</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -1553,6 +1818,40 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
         maxWidth="max-w-lg"
       >
         <form onSubmit={handleSaveAsset} className="space-y-4 text-xs">
+          {/* In-Modal Form Error Alert */}
+          {assetFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{assetFormError}</div>
+              <button
+                type="button"
+                onClick={() => setAssetFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {(brands.length > 1 || selectedBrandId === 'all') && (
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Brand *</label>
+              <select
+                required
+                value={assetForm.brandId}
+                onChange={e => setAssetForm({ ...assetForm, brandId: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-medium"
+              >
+                <option value="">-- Choose Brand --</option>
+                {brands.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Asset Name *</label>
             <input
@@ -1668,9 +1967,11 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={assetSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              {editingAsset ? 'Save Changes' : 'Create Asset'}
+              {assetSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingAsset ? 'Save Changes' : 'Create Asset'}</span>
             </button>
           </div>
         </form>
@@ -1681,27 +1982,153 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
       {/* ============================================================ */}
       <Modal
         isOpen={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
+        onClose={() => {
+          setIsAssignModalOpen(false);
+          setAssignEmployeeSearch('');
+        }}
         title="Assign Asset to Employee"
         description={`Assign ${selectedAssetForAssign?.name} (${selectedAssetForAssign?.assetTag})`}
         maxWidth="max-w-md"
       >
         <form onSubmit={handleAssignAsset} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Select Employee *</label>
-            <select
-              required
-              value={assignForm.employeeId}
-              onChange={e => setAssignForm({ ...assignForm, employeeId: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-medium"
-            >
-              <option value="">-- Choose Employee --</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName} ({emp.employeeId}) - {emp.department?.name || 'General'}
-                </option>
-              ))}
-            </select>
+          {/* In-Modal Form Error Alert */}
+          {assignFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{assignFormError}</div>
+              <button
+                type="button"
+                onClick={() => setAssignFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Searchable Employee Selection */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block font-semibold text-slate-700">Select Employee *</label>
+              {selectedAssignEmployee && (
+                <button
+                  type="button"
+                  onClick={() => setAssignForm({ ...assignForm, employeeId: '' })}
+                  className="text-[11px] text-brand-600 hover:text-brand-800 font-semibold"
+                >
+                  Change Employee
+                </button>
+              )}
+            </div>
+
+            {/* Search Input Box */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search employee by name, ID, department..."
+                value={assignEmployeeSearch}
+                onChange={e => setAssignEmployeeSearch(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+              />
+              {assignEmployeeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAssignEmployeeSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Selected Employee Card */}
+            {selectedAssignEmployee && (
+              <div className="p-2.5 bg-brand-50 border border-brand-200 rounded-lg flex items-center justify-between animate-in fade-in">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold text-[11px] shrink-0 shadow-2xs">
+                    {selectedAssignEmployee.firstName?.[0]}{selectedAssignEmployee.lastName?.[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 truncate text-xs flex items-center gap-1.5">
+                      <span>{selectedAssignEmployee.firstName} {selectedAssignEmployee.lastName}</span>
+                      <span className="font-mono text-[10px] bg-white px-1.5 py-0.2 rounded border border-brand-200 text-brand-700 font-semibold">
+                        {selectedAssignEmployee.employeeId}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 truncate">
+                      {selectedAssignEmployee.department?.name || 'General'}
+                      {selectedAssignEmployee.designation?.title ? ` • ${selectedAssignEmployee.designation.title}` : ''}
+                      {selectedAssignEmployee.brand?.name ? ` (${selectedAssignEmployee.brand.name})` : ''}
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                  Selected
+                </span>
+              </div>
+            )}
+
+            {/* Filtered Employee List */}
+            <div className="border border-slate-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-slate-100 bg-white shadow-2xs">
+              {filteredAssignEmployees.length === 0 ? (
+                <div className="p-4 text-center text-slate-400 text-xs space-y-1">
+                  <div>No employees found matching &quot;{assignEmployeeSearch}&quot;</div>
+                  <button
+                    type="button"
+                    onClick={() => setAssignEmployeeSearch('')}
+                    className="text-[11px] text-brand-600 hover:underline font-semibold"
+                  >
+                    Clear search filter
+                  </button>
+                </div>
+              ) : (
+                filteredAssignEmployees.map(emp => {
+                  const isSelected = assignForm.employeeId === emp.id;
+                  return (
+                    <div
+                      key={emp.id}
+                      onClick={() => setAssignForm({ ...assignForm, employeeId: emp.id })}
+                      className={`p-2 flex items-center justify-between cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-brand-50/90 text-brand-900 font-semibold'
+                          : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            isSelected ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {emp.firstName?.[0]}{emp.lastName?.[0]}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium flex items-center gap-1.5">
+                            <span>{emp.firstName} {emp.lastName}</span>
+                            <span className="font-mono text-[10px] text-slate-400">({emp.employeeId})</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {emp.department?.name || 'General'}
+                            {emp.designation?.title ? ` • ${emp.designation.title}` : ''}
+                            {emp.brand?.name ? ` • ${emp.brand.name}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] text-slate-400 px-0.5">
+              <span>{filteredAssignEmployees.length} employee{filteredAssignEmployees.length === 1 ? '' : 's'} available</span>
+              {!assignForm.employeeId && (
+                <span className="text-amber-600 font-medium">Click an employee above to select</span>
+              )}
+            </div>
           </div>
 
           <div>
@@ -1736,9 +2163,11 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={assignSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              Confirm Assignment
+              {assignSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Confirm Assignment</span>
             </button>
           </div>
         </form>
@@ -1755,6 +2184,21 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
         maxWidth="max-w-md"
       >
         <form onSubmit={handleReturnAsset} className="space-y-4 text-xs">
+          {/* In-Modal Form Error Alert */}
+          {returnFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{returnFormError}</div>
+              <button
+                type="button"
+                onClick={() => setReturnFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
             <div className="text-[11px] text-slate-500">Currently held by:</div>
             <div className="font-bold text-slate-900 mt-0.5">
@@ -1812,9 +2256,11 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={returnSubmitting}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              Confirm Return
+              {returnSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Confirm Return</span>
             </button>
           </div>
         </form>
@@ -1836,15 +2282,15 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
               No historical assignments recorded for this asset yet.
             </div>
           ) : (
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-[500px]">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
                   <tr>
-                    <th className="py-2.5 px-3">Employee</th>
-                    <th className="py-2.5 px-3">Assigned Date</th>
-                    <th className="py-2.5 px-3">Returned Date</th>
-                    <th className="py-2.5 px-3">Condition</th>
-                    <th className="py-2.5 px-3">Notes</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Employee</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Assigned Date</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Returned Date</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Condition</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1905,6 +2351,21 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
         maxWidth="max-w-lg"
       >
         <form onSubmit={handleSaveDocument} className="space-y-4 text-xs">
+          {/* In-Modal Form Error Alert */}
+          {docFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{docFormError}</div>
+              <button
+                type="button"
+                onClick={() => setDocFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {!editingDoc && (
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Select Employee *</label>
@@ -2022,9 +2483,11 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={docSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              {editingDoc ? 'Save Changes' : 'Upload Document'}
+              {docSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingDoc ? 'Save Changes' : 'Upload Document'}</span>
             </button>
           </div>
         </form>
@@ -2041,6 +2504,21 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
         maxWidth="max-w-md"
       >
         <form onSubmit={handleReplaceDocument} className="space-y-4 text-xs">
+          {/* In-Modal Form Error Alert */}
+          {replaceFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{replaceFormError}</div>
+              <button
+                type="button"
+                onClick={() => setReplaceFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900">
             <div className="font-semibold text-xs flex items-center gap-1.5">
               <FolderSync className="w-4 h-4 text-amber-600" />
@@ -2125,9 +2603,11 @@ export const AssetsDocumentsPage: React.FC<AssetsDocumentsPageProps> = ({ mode =
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={replaceSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              Replace Document
+              {replaceSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Replace Document</span>
             </button>
           </div>
         </form>

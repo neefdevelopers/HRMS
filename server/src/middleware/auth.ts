@@ -21,7 +21,6 @@ export interface AuthenticatedUser {
   platformRole?: string;
   companyId?: string | null;
   brandId?: string | null;
-  branchId?: string | null;
   employeeId?: string | null;
   firstName: string;
   lastName: string;
@@ -190,7 +189,6 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
       role: effectiveRole,
       companyId: effectiveCompanyId,
       brandId: effectiveBrandId || user.brandId,
-      branchId: user.branchId,
       employeeId: user.employeeId,
       firstName: user.firstName,
       lastName: user.lastName,

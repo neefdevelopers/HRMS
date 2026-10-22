@@ -123,7 +123,7 @@ export const AttendanceChart: React.FC<AttendanceChartProps> = ({ distribution, 
       </div>
 
       {/* Summary indicators */}
-      <div className="grid grid-cols-5 gap-2 mt-4 pt-4 border-t border-slate-100 text-center">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mt-4 pt-4 border-t border-slate-100 text-center">
         <div>
           <span className="block text-[10px] uppercase font-semibold text-slate-400">Present</span>
           <span className="text-sm font-bold text-emerald-600">{distribution.present}</span>

@@ -35,27 +35,28 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
       <div
         className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
       <div
-        className={`relative bg-white rounded-xl shadow-xl border border-slate-200 w-full ${maxWidth} z-10 overflow-hidden transform transition-all`}
+        className={`relative bg-white rounded-xl shadow-xl border border-slate-200 w-full ${maxWidth} z-10 overflow-hidden transform transition-all my-auto max-h-[92vh] flex flex-col`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-            {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 shrink-0">
+          <div className="min-w-0 pr-2">
+            <h3 className="text-base font-semibold text-slate-900 truncate">{title}</h3>
+            {description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors shrink-0"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto min-w-0 flex-1">{children}</div>
       </div>
     </div>
   );

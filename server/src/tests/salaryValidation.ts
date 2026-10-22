@@ -98,7 +98,6 @@ async function runTests() {
       data: {
         employeeId: 'TEST-9999',
         brandId: brand.id,
-        branchId: arjun.branchId,
         departmentId: arjun.departmentId,
         designationId: arjun.designationId,
         firstName: 'Test',
@@ -155,7 +154,6 @@ async function runTests() {
       employeeId: 'APEX-1002',
       department: 'Engineering & Technology',
       designation: 'Software Development Engineer',
-      branch: 'Mumbai HQ - BKC',
       joiningDate: '2023-04-01',
       currency: 'INR',
       baseSalary: 45000,

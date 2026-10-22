@@ -18,7 +18,10 @@ import {
   Download,
   FileText,
   ExternalLink,
-  Send
+  Send,
+  AlertCircle,
+  X,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useBrand } from '../context/BrandContext';
@@ -40,7 +43,6 @@ interface SalaryOverviewItem {
     monthlySalary?: number;
     department?: { name: string };
     designation?: { title: string };
-    branch?: { name: string };
     brand?: { name: string };
   };
   period: string;
@@ -114,6 +116,8 @@ export const SalaryPage: React.FC = () => {
 
   // Modals
   const [isIncentiveModalOpen, setIsIncentiveModalOpen] = useState(false);
+  const [incentiveError, setIncentiveError] = useState<string | null>(null);
+  const [incentiveSubmitting, setIncentiveSubmitting] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SalaryOverviewItem | null>(null);
 
@@ -125,6 +129,7 @@ export const SalaryPage: React.FC = () => {
 
   // Receipt Preview & Mail Modal
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [receiptModalError, setReceiptModalError] = useState<string | null>(null);
   const [previewReceiptItem, setPreviewReceiptItem] = useState<SalaryOverviewItem | null>(null);
   const [receiptDetails, setReceiptDetails] = useState<any | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -240,6 +245,7 @@ export const SalaryPage: React.FC = () => {
   const handleOpenReceiptPreview = async (item: SalaryOverviewItem) => {
     setPreviewReceiptItem(item);
     setEmailSuccessInfo(null);
+    setReceiptModalError(null);
     setIsReceiptModalOpen(true);
     setReceiptLoading(true);
     setReceiptDetails(null);
@@ -252,7 +258,7 @@ export const SalaryPage: React.FC = () => {
       setReceiptDetails(res);
     } catch (err: any) {
       console.error('Failed to prepare receipt:', err);
-      setMessage({ type: 'error', text: err.message || 'Failed to prepare receipt preview' });
+      setReceiptModalError(err.message || 'Failed to prepare receipt preview');
     } finally {
       setReceiptLoading(false);
     }
@@ -261,6 +267,7 @@ export const SalaryPage: React.FC = () => {
   // Send Email from inside the Receipt Preview Modal
   const handleSendEmailFromPreview = async () => {
     if (!previewReceiptItem) return;
+    setReceiptModalError(null);
     try {
       setSendingReceiptEmail(true);
       const res: any = await api.sendSalaryReceiptMail({
@@ -277,7 +284,7 @@ export const SalaryPage: React.FC = () => {
       });
       await loadSalaryData();
     } catch (err: any) {
-      alert(err.message || 'Failed to send receipt email');
+      setReceiptModalError(err.message || 'Failed to send receipt email');
     } finally {
       setSendingReceiptEmail(false);
     }
@@ -286,6 +293,7 @@ export const SalaryPage: React.FC = () => {
   // Open Add / Edit Incentive Modal
   const handleOpenIncentiveModal = (item: SalaryOverviewItem) => {
     setSelectedItem(item);
+    setIncentiveError(null);
     setIncentiveForm({
       amount: item.incentiveAmount > 0 ? item.incentiveAmount.toString() : '',
       reason: item.incentiveReason || ''
@@ -297,8 +305,9 @@ export const SalaryPage: React.FC = () => {
   const handleSaveIncentive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    setIncentiveError(null);
+    setIncentiveSubmitting(true);
     try {
-      setActionLoading(true);
       const amountVal = Math.max(0, parseFloat(incentiveForm.amount) || 0);
       const isEditing = Boolean(selectedItem.incentiveAmount > 0);
       await api.createIncentive({
@@ -322,9 +331,9 @@ export const SalaryPage: React.FC = () => {
         if (refreshed) setSelectedItem(refreshed);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to save incentive');
+      setIncentiveError(err.message || 'Failed to save incentive');
     } finally {
-      setActionLoading(false);
+      setIncentiveSubmitting(false);
     }
   };
 
@@ -422,7 +431,7 @@ export const SalaryPage: React.FC = () => {
 
       {/* Summary KPI Strip */}
       {overviewData && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
             <span className="text-[11px] font-medium text-slate-500 block">Total Employees</span>
             <div className="text-lg font-bold text-slate-900 mt-0.5">
@@ -515,32 +524,30 @@ export const SalaryPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Clean Employee Salary Table */}
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold">
               <tr>
-                <th className="px-4 py-3">Employee</th>
-                <th className="px-3 py-3">Fixed Salary</th>
-                <th className="px-3 py-3">Overtime</th>
-                <th className="px-3 py-3">Incomplete Hours</th>
-                <th className="px-3 py-3">Incentive</th>
-                <th className="px-4 py-3 text-right">Final Payable Salary</th>
-                <th className="px-3 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 whitespace-nowrap">Employee</th>
+                <th className="px-3 py-3 whitespace-nowrap">Base Salary</th>
+                <th className="px-3 py-3 whitespace-nowrap">Adjustments (OT / Deduct / Bonus)</th>
+                <th className="px-4 py-3 text-right whitespace-nowrap">Net Payable</th>
+                <th className="px-3 py-3 text-center whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading && !overviewData ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-300" />
                     Calculating employee salary data...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                     No employee records found for this period.
                   </td>
                 </tr>
@@ -563,64 +570,54 @@ export const SalaryPage: React.FC = () => {
                     </td>
 
                     {/* Fixed Salary */}
-                    <td className="px-3 py-3 font-medium text-slate-900">
-                      ₹{item.fixedSalary.toLocaleString('en-IN')}
+                    <td className="px-3 py-3">
+                      <span className="font-semibold text-slate-900">
+                        ₹{item.fixedSalary.toLocaleString('en-IN')}
+                      </span>
+                      <span className="block text-[10px] text-slate-400">Fixed base</span>
                     </td>
 
-                    {/* Overtime */}
+                    {/* Adjustments (OT, Incomplete, Incentive) */}
                     <td className="px-3 py-3">
-                      {item.otHours > 0 ? (
-                        <div>
-                          <span className="font-semibold text-emerald-700">
-                            + ₹{item.otAmount.toLocaleString('en-IN')}
-                          </span>
-                          <span className="block text-[10px] text-slate-500">
-                            {item.otHours} hrs @ ₹{item.otRate}/h
-                          </span>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {item.otHours > 0 && (
+                          <div className="text-[11px]" title={`${item.otHours} hrs @ ₹${item.otRate}/h`}>
+                            <span className="font-semibold text-emerald-700">+₹{item.otAmount.toLocaleString('en-IN')}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">({item.otHours}h OT)</span>
+                          </div>
+                        )}
+                        {item.incompleteHours > 0 && (
+                          <div className="text-[11px]" title={`${item.incompleteHours} hrs @ ₹${item.incompleteDeductionRate}/h`}>
+                            <span className="font-semibold text-rose-700">-₹{item.incompleteDeductionAmount.toLocaleString('en-IN')}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">({item.incompleteHours}h inc)</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          {item.incentiveAmount > 0 ? (
+                            <span className="text-[11px] font-semibold text-blue-700">
+                              +₹{item.incentiveAmount.toLocaleString('en-IN')}
+                            </span>
+                          ) : null}
+                          {canManageSalary && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenIncentiveModal(item)}
+                              className="text-[10px] text-brand-600 hover:text-brand-800 underline font-medium"
+                              title={item.incentiveAmount > 0 ? 'Edit Incentive' : 'Add Incentive'}
+                            >
+                              {item.incentiveAmount > 0 ? 'Edit bonus' : '+ Bonus'}
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-
-                    {/* Incomplete Hours */}
-                    <td className="px-3 py-3">
-                      {item.incompleteHours > 0 ? (
-                        <div>
-                          <span className="font-semibold text-rose-700">
-                            - ₹{item.incompleteDeductionAmount.toLocaleString('en-IN')}
-                          </span>
-                          <span className="block text-[10px] text-slate-500">
-                            {item.incompleteHours} hrs @ ₹{item.incompleteDeductionRate}/h
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-
-                    {/* Incentives */}
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className={item.incentiveAmount > 0 ? 'font-semibold text-blue-700' : 'text-slate-400'}>
-                          {item.incentiveAmount > 0 ? `₹${item.incentiveAmount.toLocaleString('en-IN')}` : '₹0'}
-                        </span>
-                        {canManageSalary && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenIncentiveModal(item)}
-                            className="text-[10px] text-brand-600 hover:text-brand-800 underline font-medium ml-1"
-                            title={item.incentiveAmount > 0 ? 'Edit Incentive' : 'Add Incentive'}
-                          >
-                            {item.incentiveAmount > 0 ? 'Edit' : '+ Add'}
-                          </button>
+                        {item.otHours === 0 && item.incompleteHours === 0 && item.incentiveAmount === 0 && (
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </div>
                     </td>
 
                     {/* Final Salary */}
                     <td className="px-4 py-3 text-right">
-                      <span className="font-bold text-sm text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <span className="font-bold text-xs sm:text-sm text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
                         ₹{item.finalSalary.toLocaleString('en-IN')}
                       </span>
                     </td>
@@ -712,6 +709,140 @@ export const SalaryPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {loading && !overviewData ? (
+            <div className="p-8 text-center text-slate-400">
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-300" />
+              Calculating employee salary data...
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              No employee records found for this period.
+            </div>
+          ) : (
+            filteredItems.map((item) => (
+              <div key={item.employeeId} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {item.employee.firstName} {item.employee.lastName}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                        {item.employee.employeeId}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {item.employee.department?.name || 'Department'}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    {item.hasMissingPunchFlags ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        Review
+                      </span>
+                    ) : item.isSaved ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Saved
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        Preview
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Salary amounts */}
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs">
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-medium">Base Salary</div>
+                    <div className="font-semibold text-slate-800 mt-0.5">₹{item.fixedSalary.toLocaleString('en-IN')}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-medium">Net Payable</div>
+                    <div className="font-bold text-emerald-700 mt-0.5">₹{item.finalSalary.toLocaleString('en-IN')}</div>
+                  </div>
+                </div>
+
+                {/* Adjustments row */}
+                <div className="text-xs space-y-1 bg-white p-2.5 rounded-lg border border-slate-100">
+                  <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Adjustments</div>
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {item.otHours > 0 && (
+                      <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        +{item.otHours}h OT (₹{item.otAmount.toLocaleString('en-IN')})
+                      </span>
+                    )}
+                    {item.incompleteHours > 0 && (
+                      <span className="text-[11px] font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                        -{item.incompleteHours}h inc (-₹{item.incompleteDeductionAmount.toLocaleString('en-IN')})
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <span className={`text-[11px] font-medium ${item.incentiveAmount > 0 ? 'text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100' : 'text-slate-400'}`}>
+                        {item.incentiveAmount > 0 ? `+Bonus: ₹${item.incentiveAmount.toLocaleString('en-IN')}` : 'No bonus'}
+                      </span>
+                      {canManageSalary && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenIncentiveModal(item)}
+                          className="text-[10px] text-brand-600 hover:text-brand-800 underline font-medium"
+                        >
+                          {item.incentiveAmount > 0 ? 'Edit' : '+ Add'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetails(item)}
+                      className="text-xs text-slate-600 hover:text-brand-600 flex items-center gap-1 font-medium"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReceiptPreview(item)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Receipt
+                    </button>
+                    {item.receiptId && (
+                      <button
+                        type="button"
+                        onClick={() => api.downloadReceiptPdf(item.receiptId!, item.receiptNumber || undefined)}
+                        className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-medium"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </button>
+                    )}
+                  </div>
+                  {canManageSalary && (
+                    <button
+                      type="button"
+                      onClick={() => handleCalculateSingle(item)}
+                      disabled={actionLoading}
+                      className="px-2.5 py-1 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors"
+                    >
+                      {item.isSaved ? 'Recalculate' : 'Save'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </Card>
 
       {/* MODAL 1: Add / Edit Incentive Modal */}
@@ -727,6 +858,20 @@ export const SalaryPage: React.FC = () => {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSaveIncentive} className="space-y-4">
+          {incentiveError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{incentiveError}</div>
+              <button
+                type="button"
+                onClick={() => setIncentiveError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
             <div className="flex justify-between">
               <span className="text-slate-500">Employee:</span>
@@ -798,10 +943,11 @@ export const SalaryPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={actionLoading}
-              className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-2xs disabled:opacity-50"
+              disabled={incentiveSubmitting || actionLoading}
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50 rounded-lg shadow-2xs flex items-center gap-1.5"
             >
-              {selectedItem && selectedItem.incentiveAmount > 0 ? 'Update Incentive' : 'Save Incentive'}
+              {incentiveSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{selectedItem && selectedItem.incentiveAmount > 0 ? 'Update Incentive' : 'Save Incentive'}</span>
             </button>
           </div>
         </form>
@@ -904,15 +1050,15 @@ export const SalaryPage: React.FC = () => {
                   <span className="text-[11px] font-normal text-slate-400">Shift standard: 8 hrs/day</span>
                 </h4>
                 <div className="overflow-x-auto rounded-lg border border-slate-200 max-h-56">
-                  <table className="w-full text-left text-[11px]">
+                  <table className="w-full text-left text-[11px] min-w-[500px]">
                     <thead className="bg-slate-100/80 sticky top-0 border-b border-slate-200 text-slate-600 font-semibold">
                       <tr>
-                        <th className="px-2.5 py-1.5">Date</th>
-                        <th className="px-2.5 py-1.5">Status</th>
-                        <th className="px-2.5 py-1.5">Hours Worked</th>
-                        <th className="px-2.5 py-1.5">Overtime</th>
-                        <th className="px-2.5 py-1.5">Incomplete</th>
-                        <th className="px-2.5 py-1.5">Flags</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Date</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Status</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Hours Worked</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Overtime</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Incomplete</th>
+                        <th className="px-2.5 py-1.5 whitespace-nowrap">Flags</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1033,6 +1179,20 @@ export const SalaryPage: React.FC = () => {
       >
         {previewReceiptItem && (
           <div className="space-y-4">
+            {receiptModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{receiptModalError}</div>
+                <button
+                  type="button"
+                  onClick={() => setReceiptModalError(null)}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Success message banner */}
             {emailSuccessInfo && (
               <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
@@ -1121,8 +1281,8 @@ export const SalaryPage: React.FC = () => {
                     </div>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[11px]">Branch / Location</span>
-                    <div className="font-medium text-slate-800 mt-0.5">{receiptDetails.snapshot?.branch}</div>
+                    <span className="text-slate-500 text-[11px]">Brand</span>
+                    <div className="font-medium text-slate-800 mt-0.5">{receiptDetails.snapshot?.brand || 'N/A'}</div>
                   </div>
                 </div>
 

@@ -71,14 +71,12 @@ model User {
   isActive     Boolean   @default(true)
   companyId    String?   // Primary/default company for single-company users
   brandId      String?
-  branchId     String?
   employeeId   String?   @unique
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   brand        Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
   employee     Employee? @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
   memberships  CompanyMembership[]
   auditLogs    AuditLog[]
@@ -105,7 +103,6 @@ model Brand {
   updatedAt   DateTime     @updatedAt
 
   company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  branches        Branch[]
   departments     Department[]
   designations    Designation[]
   shifts          Shift[]
@@ -133,31 +130,6 @@ model Brand {
   @@unique([companyId, code])
   @@unique([companyId, name])
   @@index([companyId])
-}
-
-// Branches under Brands
-model Branch {
-  id        String     @id @default(uuid())
-  name      String
-  code      String
-  brandId   String
-  city      String
-  state     String?
-  country   String     @default("India")
-  address   String?
-  phone     String?
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  brand     Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  employees Employee[]
-  users     User[]
-  devices   PunchingDevice[]
-  attendances Attendance[]
-  holidays  Holiday[]
-
-  @@unique([brandId, code])
 }
 
 // Departments
@@ -229,7 +201,6 @@ model Employee {
   companyId             String?
   employeeId            String       // Unique business ID scoped per company e.g. "EMP-1001"
   brandId               String
-  branchId              String
   departmentId          String
   designationId         String
   shiftId               String?
@@ -258,7 +229,6 @@ model Employee {
   // Relations
   company               Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   brand                 Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  branch                Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department            Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   designation           Designation  @relation(fields: [designationId], references: [id], onDelete: Restrict)
   shift                 Shift?       @relation(fields: [shiftId], references: [id], onDelete: SetNull)
@@ -291,7 +261,6 @@ model Employee {
   @@index([companyId])
   @@index([brandId])
   @@index([departmentId])
-  @@index([branchId])
   @@index([employeeStatus])
 }
 
@@ -327,7 +296,6 @@ model PunchingDevice {
   ipAddress     String?
   location      String?
   brandId       String
-  branchId      String
   status        String       @default("ONLINE") // ONLINE, OFFLINE, ERROR
   port          Int?         @default(4370)
   apiSecret     String?
@@ -338,7 +306,6 @@ model PunchingDevice {
 
   company       Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   brand         Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   mappings      EmployeeDeviceMapping[]
   punchRecords  PunchRecord[]
   syncLogs      PunchSyncLog[]
@@ -390,7 +357,6 @@ model Attendance {
   companyId             String?
   employeeId            String
   brandId               String
-  branchId              String
   date                  String       // YYYY-MM-DD
   shiftId               String?
   checkIn               DateTime?
@@ -410,7 +376,6 @@ model Attendance {
   company               Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employee              Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   brand                 Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  branch                Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   shift                 Shift?       @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   regularizations       AttendanceRegularization[]
 
@@ -443,13 +408,11 @@ model Holiday {
   name        String
   date        String   // YYYY-MM-DD
   brandId     String?
-  branchId    String?
   isOptional  Boolean  @default(false)
   description String?
   createdAt   DateTime @default(now())
 
   brand       Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([date])
 }

@@ -186,13 +186,11 @@ export class SystemSettingService {
     const brands = await prisma.brand.findMany({
       where: companyId ? { companyId } : {},
       include: {
-        branches: true,
         _count: {
           select: {
             employees: true,
             shifts: true,
             departments: true,
-            branches: true,
             devices: true
           }
         }
@@ -253,7 +251,6 @@ export class SystemSettingService {
       where: companyId ? { brand: { companyId } } : {},
       include: {
         brand: { select: { id: true, name: true, code: true } },
-        branch: { select: { id: true, name: true, code: true } },
         _count: { select: { mappings: true, punchRecords: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -682,8 +679,8 @@ export class SystemSettingService {
   // PUNCHING DEVICE MANAGEMENT
   // ==========================================
   async createDevice(data: any, userId?: string, ipAddress?: string) {
-    if (!data.deviceName || !data.serialNumber || !data.brandId || !data.branchId) {
-      throw new Error('Device name, serial number, brand, and branch are required.');
+    if (!data.deviceName || !data.serialNumber || !data.brandId) {
+      throw new Error('Device name, serial number, and brand are required.');
     }
 
     const created = await prisma.punchingDevice.create({
@@ -694,12 +691,11 @@ export class SystemSettingService {
         port: Number(data.port) || 4370,
         location: data.location?.trim() || null,
         brandId: data.brandId,
-        branchId: data.branchId,
         status: data.status || 'ONLINE',
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
         apiSecret: data.apiSecret?.trim() || null
       },
-      include: { brand: true, branch: true }
+      include: { brand: true }
     });
 
     await this.logAudit(userId, 'DEVICE_CREATE', { id: created.id, name: created.deviceName }, ipAddress);
@@ -722,7 +718,7 @@ export class SystemSettingService {
         ...(data.isActive !== undefined ? { isActive: Boolean(data.isActive) } : {}),
         ...(data.apiSecret !== undefined ? { apiSecret: data.apiSecret?.trim() || null } : {})
       },
-      include: { brand: true, branch: true }
+      include: { brand: true }
     });
 
     await this.logAudit(userId, 'DEVICE_UPDATE', { id, previous: existing, current: updated }, ipAddress);

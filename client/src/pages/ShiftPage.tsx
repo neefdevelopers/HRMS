@@ -25,7 +25,10 @@ import {
   CalendarDays,
   Search,
   Filter,
-  Check
+  Check,
+  X,
+  Loader2,
+  ArrowRight
 } from 'lucide-react';
 
 export const ShiftPage: React.FC = () => {
@@ -59,6 +62,8 @@ export const ShiftPage: React.FC = () => {
   // Modals
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
+  const [shiftFormError, setShiftFormError] = useState<string | null>(null);
+  const [shiftSubmitting, setShiftSubmitting] = useState(false);
   const [shiftForm, setShiftForm] = useState({
     name: '',
     code: '',
@@ -71,6 +76,8 @@ export const ShiftPage: React.FC = () => {
   });
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assignFormError, setAssignFormError] = useState<string | null>(null);
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [assignForm, setAssignForm] = useState<{
     selectedEmployeeIds: string[];
     shiftId: string;
@@ -187,6 +194,7 @@ export const ShiftPage: React.FC = () => {
 
   // Handle Shift Modal Open
   const handleOpenShiftModal = (shiftToEdit?: Shift) => {
+    setShiftFormError(null);
     if (shiftToEdit) {
       setEditingShift(shiftToEdit);
       setShiftForm({
@@ -218,8 +226,9 @@ export const ShiftPage: React.FC = () => {
   // Save Shift
   const handleSaveShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShiftFormError(null);
+    setShiftSubmitting(true);
     try {
-      setError(null);
       if (editingShift) {
         await api.updateShiftRecord(editingShift.id, shiftForm);
         showSuccess(`Shift "${shiftForm.name}" updated successfully.`);
@@ -231,7 +240,9 @@ export const ShiftPage: React.FC = () => {
       setIsShiftModalOpen(false);
       loadShiftsAndAssignments();
     } catch (err: any) {
-      setError(err.message || 'Failed to save shift');
+      setShiftFormError(err.message || 'Failed to save shift. Please check the timings and details.');
+    } finally {
+      setShiftSubmitting(false);
     }
   };
 
@@ -249,6 +260,7 @@ export const ShiftPage: React.FC = () => {
 
   // Handle Assign Modal Open
   const handleOpenAssignModal = () => {
+    setAssignFormError(null);
     setAssignForm({
       selectedEmployeeIds: [],
       shiftId: shifts[0]?.id || '',
@@ -265,17 +277,18 @@ export const ShiftPage: React.FC = () => {
   // Save Assignment
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAssignFormError(null);
     if (assignForm.selectedEmployeeIds.length === 0) {
-      setError('Please select at least one employee.');
+      setAssignFormError('Please select at least one employee.');
       return;
     }
     if (!assignForm.shiftId) {
-      setError('Please select a primary shift.');
+      setAssignFormError('Please select a primary shift.');
       return;
     }
 
+    setAssignSubmitting(true);
     try {
-      setError(null);
       const brandId = selectedBrandId !== 'all' ? selectedBrandId : undefined;
       await api.assignShifts({
         brandId,
@@ -297,7 +310,9 @@ export const ShiftPage: React.FC = () => {
         else loadAttendance();
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to assign shifts');
+      setAssignFormError(err.message || 'Failed to assign shifts');
+    } finally {
+      setAssignSubmitting(false);
     }
   };
 
@@ -437,35 +452,32 @@ export const ShiftPage: React.FC = () => {
             <span className="text-xs text-slate-500">{shifts.length} shift definitions active</span>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          {/* Desktop Table View */}
+          <div className="hidden sm:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Shift Name & Code</th>
-                    <th className="py-3 px-4">Shift Timings</th>
-                    <th className="py-3 px-4">Break Duration</th>
-                    <th className="py-3 px-4">Net Working Hours</th>
-                    <th className="py-3 px-4">Weekly Off</th>
-                    <th className="py-3 px-4">Grace Period</th>
-                    <th className="py-3 px-4 text-center">Type</th>
-                    {isHrOrAdmin && <th className="py-3 px-4 text-right">Actions</th>}
+                    <th className="py-3 px-4 whitespace-nowrap">Shift &amp; Type</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Timing &amp; Working Hours</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Rules &amp; Weekly Off</th>
+                    {isHrOrAdmin && <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {shifts.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
                         No shifts configured. Click "+ Create Shift" above to add your first work shift.
                       </td>
                     </tr>
                   ) : (
                     shifts.map((s) => (
                       <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 min-w-[200px]">
                           <div className="font-semibold text-slate-900">{s.name}</div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold border border-slate-200">
                               {s.code}
                             </span>
                             {s.isDefault && (
@@ -473,55 +485,59 @@ export const ShiftPage: React.FC = () => {
                                 Default
                               </span>
                             )}
+                            {s.isNightShift ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <Moon className="w-2.5 h-2.5 text-indigo-500" /> Night
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <Sun className="w-2.5 h-2.5 text-amber-500" /> Day
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono font-medium">
-                          <div className="flex items-center gap-1.5">
+
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 font-mono font-medium text-slate-900">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
                             <span>{s.startTime} – {s.endTime}</span>
                           </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-1 text-slate-600">
-                            <Coffee className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{s.breakMinutes || 60} mins</span>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span className="font-semibold text-slate-700">
+                              {s.expectedWorkingHours !== undefined ? `${s.expectedWorkingHours} hrs net` : `${s.fullDayThresholdHours || 8} hrs`}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1 text-slate-400">
+                              <Coffee className="w-3 h-3" /> {s.breakMinutes || 60}m break
+                            </span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-900">
-                          {s.expectedWorkingHours !== undefined ? `${s.expectedWorkingHours} hrs` : `${s.fullDayThresholdHours || 8} hrs`}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                            {s.weeklyOff || 'SUNDAY'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600">
-                          {s.gracePeriodMinutes || 15} mins
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          {s.isNightShift ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              <Moon className="w-3 h-3 text-indigo-500" /> Night
+
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              Off: {s.weeklyOff || 'SUNDAY'}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              <Sun className="w-3 h-3 text-amber-500" /> Day
-                            </span>
-                          )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Grace: <span className="font-medium text-slate-700">{s.gracePeriodMinutes || 15} mins</span>
+                          </div>
                         </td>
+
                         {isHrOrAdmin && (
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="inline-flex items-center gap-2">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
                               <button
                                 onClick={() => handleOpenShiftModal(s)}
-                                className="p-1 text-slate-500 hover:text-slate-800 rounded hover:bg-slate-100"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md border border-brand-200 transition-colors shadow-2xs"
                                 title="Edit Shift"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
+                                <Edit2 className="w-3 h-3" />
+                                <span>Edit</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteShift(s.id, s.name)}
-                                className="p-1 text-rose-500 hover:text-rose-700 rounded hover:bg-rose-50"
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
                                 title="Delete Shift"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -535,6 +551,79 @@ export const ShiftPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Mobile Card View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {shifts.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                No shifts configured.
+              </div>
+            ) : (
+              shifts.map((s) => (
+                <div
+                  key={s.id}
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-slate-900 text-sm">{s.name}</div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="font-mono font-bold text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                          {s.code}
+                        </span>
+                        {s.isDefault && (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-semibold">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {s.isNightShift ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <Moon className="w-2.5 h-2.5 text-indigo-500" /> Night
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        <Sun className="w-2.5 h-2.5 text-amber-500" /> Day
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between font-mono font-medium text-slate-800">
+                      <span>{s.startTime} – {s.endTime}</span>
+                      <span className="font-sans font-semibold text-slate-700">
+                        {s.expectedWorkingHours !== undefined ? `${s.expectedWorkingHours} hrs` : `${s.fullDayThresholdHours || 8} hrs`}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                      <span>Weekly Off: {s.weeklyOff || 'SUNDAY'}</span>
+                      <span>Break: {s.breakMinutes || 60}m</span>
+                    </div>
+                  </div>
+
+                  {isHrOrAdmin && (
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                      <button
+                        onClick={() => handleDeleteShift(s.id, s.name)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-md"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleOpenShiftModal(s)}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg font-semibold text-xs border border-brand-200"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit Shift</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -557,31 +646,30 @@ export const ShiftPage: React.FC = () => {
             )}
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          {/* Desktop Table View */}
+          <div className="hidden sm:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Assigned Shift</th>
-                    <th className="py-3 px-4">Start Date</th>
-                    <th className="py-3 px-4">End Date</th>
-                    <th className="py-3 px-4">Rotation Schedule</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Employee</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Shift &amp; Cycle</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Effective Period</th>
                     <th className="py-3 px-4">Notes</th>
-                    {isHrOrAdmin && <th className="py-3 px-4 text-right">Actions</th>}
+                    {isHrOrAdmin && <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {assignments.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                      <td colSpan={5} className="py-8 text-center text-slate-400">
                         No assignments recorded. Click "+ Assign Shift" to assign shifts to employees.
                       </td>
                     </tr>
                   ) : (
                     assignments.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 min-w-[180px]">
                           <div className="font-semibold text-slate-900">
                             {a.employee?.firstName} {a.employee?.lastName}
                           </div>
@@ -589,45 +677,45 @@ export const ShiftPage: React.FC = () => {
                             {a.employee?.employeeId} • {a.employee?.department?.name || 'General'}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4">
+
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="font-semibold text-slate-800">{a.shift?.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            {a.shift?.startTime} – {a.shift?.endTime} ({a.shift?.code})
+                          <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                            <span>{a.shift?.startTime} – {a.shift?.endTime}</span>
+                            {a.isRotational ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                <Repeat className="w-2.5 h-2.5 text-purple-600" />
+                                {a.rotationFrequency}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Fixed</span>
+                            )}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                          {a.startDate}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-600">
-                          {a.endDate ? a.endDate : <span className="text-emerald-600 font-semibold">Active (Ongoing)</span>}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {a.isRotational ? (
-                            <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                <Repeat className="w-3 h-3 text-purple-600" />
-                                {a.rotationFrequency} Rotation
+
+                        <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <span>{a.startDate}</span>
+                            <ArrowRight className="w-3 h-3 text-slate-300" />
+                            {a.endDate ? (
+                              <span>{a.endDate}</span>
+                            ) : (
+                              <span className="text-emerald-700 font-sans font-semibold text-[10px] bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                Ongoing
                               </span>
-                              {a.rotationShifts && a.rotationShifts.length > 0 && (
-                                <div className="text-[10px] text-purple-900 font-medium">
-                                  {a.rotationShifts.length} Shifts in cycle
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
-                              Fixed Shift
-                            </span>
-                          )}
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate">
-                          {a.notes || '—'}
+
+                        <td className="py-3.5 px-4 text-slate-500 max-w-xs truncate" title={a.notes || undefined}>
+                          {a.notes || <span className="text-slate-400 italic">No notes</span>}
                         </td>
+
                         {isHrOrAdmin && (
-                          <td className="py-3.5 px-4 text-right">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <button
                               onClick={() => handleDeleteAssignment(a.id)}
-                              className="p-1 text-rose-500 hover:text-rose-700 rounded hover:bg-rose-50 transition-colors"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
                               title="Delete Assignment"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -640,6 +728,71 @@ export const ShiftPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Mobile Card View (< sm) */}
+          <div className="sm:hidden space-y-3">
+            {assignments.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                No assignments recorded.
+              </div>
+            ) : (
+              assignments.map((a) => (
+                <div
+                  key={a.id}
+                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-slate-900">
+                        {a.employee?.firstName} {a.employee?.lastName}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {a.employee?.employeeId} • {a.employee?.department?.name || 'General'}
+                      </div>
+                    </div>
+                    {a.isRotational ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                        <Repeat className="w-2.5 h-2.5" /> {a.rotationFrequency}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                        Fixed
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-[11px]">
+                    <div className="font-semibold text-slate-800">
+                      {a.shift?.name} ({a.shift?.startTime} – {a.shift?.endTime})
+                    </div>
+                    <div className="font-mono text-slate-600 flex items-center gap-1.5">
+                      <span>{a.startDate}</span>
+                      <ArrowRight className="w-3 h-3 text-slate-300" />
+                      <span>{a.endDate || 'Ongoing Active'}</span>
+                    </div>
+                  </div>
+
+                  {a.notes && (
+                    <p className="text-[11px] text-slate-500 italic">
+                      {a.notes}
+                    </p>
+                  )}
+
+                  {isHrOrAdmin && (
+                    <div className="flex justify-end pt-1 border-t border-slate-100">
+                      <button
+                        onClick={() => handleDeleteAssignment(a.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md border border-rose-200"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Assignment</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -863,17 +1016,17 @@ export const ShiftPage: React.FC = () => {
 
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
+                  <table className="w-full text-left border-collapse text-xs min-w-[780px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                        <th className="py-3 px-4">Employee</th>
-                        <th className="py-3 px-4">Assigned Shift</th>
-                        <th className="py-3 px-4">Punch In & Out</th>
-                        <th className="py-3 px-4">Late Arrival</th>
-                        <th className="py-3 px-4">Working Hours</th>
-                        <th className="py-3 px-4">Incomplete Hours</th>
-                        <th className="py-3 px-4">Overtime Hours</th>
-                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Employee</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Assigned Shift</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Punch In & Out</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Late Arrival</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Working Hours</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Incomplete Hours</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Overtime Hours</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1001,6 +1154,20 @@ export const ShiftPage: React.FC = () => {
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSaveShift} className="space-y-4 text-xs">
+          {shiftFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{shiftFormError}</div>
+              <button
+                type="button"
+                onClick={() => setShiftFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Shift Name *</label>
             <input
@@ -1129,9 +1296,11 @@ export const ShiftPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={shiftSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              {editingShift ? 'Save Changes' : 'Create Shift'}
+              {shiftSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingShift ? 'Save Changes' : 'Create Shift'}</span>
             </button>
           </div>
         </form>
@@ -1146,6 +1315,20 @@ export const ShiftPage: React.FC = () => {
         maxWidth="max-w-lg"
       >
         <form onSubmit={handleSaveAssignment} className="space-y-4 text-xs">
+          {assignFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{assignFormError}</div>
+              <button
+                type="button"
+                onClick={() => setAssignFormError(null)}
+                className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Employee multi-selection */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -1372,9 +1555,11 @@ export const ShiftPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs"
+              disabled={assignSubmitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
             >
-              Assign Shift
+              {assignSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Assign Shift</span>
             </button>
           </div>
         </form>

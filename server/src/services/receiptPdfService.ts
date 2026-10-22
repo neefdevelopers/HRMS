@@ -15,7 +15,6 @@ export interface ReceiptPdfData {
   employeeId: string;
   department: string;
   designation: string;
-  branch: string;
   joiningDate: string;
   currency: string;
 
@@ -119,8 +118,8 @@ export class ReceiptPdfService {
         doc.font('Helvetica').fillColor('#0f172a').text(data.designation, left + 85, currentY + 68);
 
         // Column 2
-        doc.font('Helvetica').fillColor('#475569').text(`Branch:`, left + (pageWidth / 2) + 15, currentY + 26);
-        doc.font('Helvetica').fillColor('#0f172a').text(data.branch, left + (pageWidth / 2) + 85, currentY + 26);
+        doc.font('Helvetica').fillColor('#475569').text(`Brand:`, left + (pageWidth / 2) + 15, currentY + 26);
+        doc.font('Helvetica').fillColor('#0f172a').text(data.brandName, left + (pageWidth / 2) + 85, currentY + 26);
 
         doc.font('Helvetica').fillColor('#475569').text(`Issue Date:`, left + (pageWidth / 2) + 15, currentY + 40);
         doc.font('Helvetica').fillColor('#0f172a').text(data.issueDate, left + (pageWidth / 2) + 85, currentY + 40);

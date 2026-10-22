@@ -140,7 +140,6 @@ export class SalaryCalculatorService {
       where: { id: employeeId },
       include: {
         brand: true,
-        branch: true,
         department: true,
         designation: true,
         shift: true

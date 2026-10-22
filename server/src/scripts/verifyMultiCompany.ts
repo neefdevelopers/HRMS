@@ -61,7 +61,7 @@ async function runMultiCompanyVerification() {
   }
   assert(!!companyB, '5. Company B (Beta Logistics Inc.) is ready and active');
 
-  // 3. Create Company B Brand, Branch, Department, Designation
+  // 3. Create Company B Brand, Department, Designation
   let brandB = await prisma.brand.findFirst({
     where: { companyId: companyB.id, code: 'BETA_EXP' }
   });
@@ -80,21 +80,6 @@ async function runMultiCompanyVerification() {
   }
   assert(!!brandB, '6. Company B brand (Beta Express Fleet) exists');
 
-  let branchB = await prisma.branch.findFirst({
-    where: { brandId: brandB.id, code: 'SEA_PORT' }
-  });
-  if (!branchB) {
-    branchB = await prisma.branch.create({
-      data: {
-        brandId: brandB.id,
-        name: 'Seattle Port Hub',
-        code: 'SEA_PORT',
-        city: 'Seattle',
-        country: 'USA',
-        isActive: true
-      }
-    });
-  }
 
   let deptB = await prisma.department.findFirst({
     where: { brandId: brandB.id, code: 'FLEET_OPS' }
@@ -132,7 +117,6 @@ async function runMultiCompanyVerification() {
       data: {
         companyId: companyB.id,
         brandId: brandB.id,
-        branchId: branchB.id,
         departmentId: deptB.id,
         designationId: desigB.id,
         employeeId: 'BETA-1001',
@@ -184,8 +168,7 @@ async function runMultiCompanyVerification() {
         lastName: 'Vance',
         role: 'ADMIN',
         companyId: companyB.id,
-        brandId: brandB.id,
-        branchId: branchB.id
+        brandId: brandB.id
       }
     });
   }
@@ -263,7 +246,6 @@ async function runMultiCompanyVerification() {
       data: {
         company: { connect: { id: companyB.id } },
         brand: { connect: { id: brandB.id } },
-        branch: { connect: { id: branchB.id } },
         department: { connect: { id: deptB.id } },
         designation: { connect: { id: desigB.id } },
         employeeId: existingEmployeeA.employeeId, // Same ID, but in Company B!
@@ -290,7 +272,6 @@ async function runMultiCompanyVerification() {
       data: {
         companyId: companyB.id,
         brandId: brandB.id,
-        branchId: branchB.id,
         departmentId: deptB.id,
         designationId: desigB.id,
         joiningDate: new Date().toISOString(),

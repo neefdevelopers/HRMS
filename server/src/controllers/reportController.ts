@@ -43,19 +43,18 @@ export const getAttendanceReport = async (req: AuthenticatedRequest, res: Respon
           }
         },
         brand: { select: { name: true } },
-        branch: { select: { name: true } },
         shift: { select: { name: true } }
       },
       orderBy: [{ date: 'asc' }, { employeeId: 'asc' }]
     });
 
     if (format === 'csv') {
-      const header = 'Date,Employee ID,Employee Name,Brand,Branch,Department,Designation,Shift,Status,Check In,Check Out,Working Hours,Late Minutes\n';
+      const header = 'Date,Employee ID,Employee Name,Brand,Department,Designation,Shift,Status,Check In,Check Out,Working Hours,Late Minutes\n';
       const rows = records.map((r) => {
         const name = `"${r.employee.firstName} ${r.employee.lastName}"`;
         const inTime = r.checkIn ? new Date(r.checkIn).toLocaleTimeString() : '-';
         const outTime = r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : '-';
-        return `${r.date},${r.employee.employeeId},${name},"${r.brand.name}","${r.branch.name}","${r.employee.department.name}","${r.employee.designation.title}","${r.shift?.name || '-'}",${r.status},${inTime},${outTime},${r.workingHours},${r.lateMinutes}`;
+        return `${r.date},${r.employee.employeeId},${name},"${r.brand.name}","${r.employee.department.name}","${r.employee.designation.title}","${r.shift?.name || '-'}",${r.status},${inTime},${outTime},${r.workingHours},${r.lateMinutes}`;
       }).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
